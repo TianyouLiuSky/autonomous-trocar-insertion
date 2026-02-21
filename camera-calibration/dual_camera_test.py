@@ -1,26 +1,17 @@
 import cv2
 import numpy as np
 
-# ----------------------------
-# Config
-# ----------------------------
+# Params
 LEFT_PATH  = "./stereo_camera_test_images/Left2.png"
 RIGHT_PATH = "./stereo_camera_test_images/Right2.png"
-
-# Display max size (fits most laptop screens)
 MAX_W, MAX_H = 1200, 800
-
-# Downsample for alignment speed/stability (ECC runs on these)
-ALIGN_SCALE = 0.5
-
-# ECC settings
+ALIGN_SCALE = 0.5 # Downsample for ECC speed
 ECC_MOTION = cv2.MOTION_EUCLIDEAN  # rotation + translation (good first choice)
 ECC_ITERS = 200
 ECC_EPS = 1e-6
 ECC_GAUSS = 5  # smoothing helps on noisy/low-texture images
 
-
-def imshow_fit(winname, img, max_w=MAX_W, max_h=MAX_H):
+def show_image(winname, img, max_w=MAX_W, max_h=MAX_H):
     """Show an image resized to fit within max_w x max_h, keeping aspect ratio."""
     h, w = img.shape[:2]
     s = min(max_w / w, max_h / h, 1.0)
@@ -30,14 +21,14 @@ def imshow_fit(winname, img, max_w=MAX_W, max_h=MAX_H):
     cv2.imshow(winname, img)
 
 
-def load_or_die(path, flags=cv2.IMREAD_COLOR):
+def load(path, flags=cv2.IMREAD_COLOR):
     img = cv2.imread(path, flags)
     if img is None:
         raise FileNotFoundError(f"Failed to load image: {path}")
     return img
 
 
-def align_right_to_left_ecc(left_gray, right_gray, scale=ALIGN_SCALE):
+def align(left_gray, right_gray, scale=ALIGN_SCALE):
     """
     Estimate a Euclidean transform (rotation+translation) that aligns right to left
     using ECC, then return the 2x3 warp matrix in FULL-resolution coordinates.
@@ -75,8 +66,8 @@ def align_right_to_left_ecc(left_gray, right_gray, scale=ALIGN_SCALE):
 
 def main():
     # Load color + grayscale
-    left_color = load_or_die(LEFT_PATH, cv2.IMREAD_COLOR)
-    right_color = load_or_die(RIGHT_PATH, cv2.IMREAD_COLOR)
+    left_color = load(LEFT_PATH, cv2.IMREAD_COLOR)
+    right_color = load(RIGHT_PATH, cv2.IMREAD_COLOR)
 
     left_gray = cv2.cvtColor(left_color, cv2.COLOR_BGR2GRAY)
     right_gray = cv2.cvtColor(right_color, cv2.COLOR_BGR2GRAY)
@@ -89,7 +80,7 @@ def main():
 
     # Align right -> left with ECC
     try:
-        cc, warp_full = align_right_to_left_ecc(left_gray, right_gray, scale=ALIGN_SCALE)
+        cc, warp_full = align(left_gray, right_gray, scale=ALIGN_SCALE)
         print(f"[ECC] Convergence score (higher is better): {cc:.6f}")
         print("[ECC] Full-res warp (2x3):\n", warp_full)
     except cv2.error as e:
@@ -105,15 +96,16 @@ def main():
     # Basic overlay (aligned)
     overlay_aligned = cv2.addWeighted(left_color, 0.5, aligned_right, 0.5, 0)
 
+    # Show diff image. White around edges is good showing stereo. Uniform black means duplicate feed (bad)
     # Difference image after alignment (great for "stereo vs duplicate feed" sanity check)
     diff = cv2.absdiff(left_color, aligned_right)
 
     # Show results
-    imshow_fit("Left", left_color)
-    imshow_fit("Right (raw)", right_color)
-    imshow_fit("Right (aligned to Left)", aligned_right)
-    imshow_fit("Overlay (aligned)", overlay_aligned)
-    imshow_fit("AbsDiff (aligned)", diff)
+    show_image("Left", left_color)
+    show_image("Right (raw)", right_color)
+    show_image("Right (aligned to Left)", aligned_right)
+    show_image("Overlay (aligned)", overlay_aligned)
+    show_image("AbsDiff (aligned)", diff)
 
     print("\nControls:")
     print(" - Press any key in an image window to close all windows.")

@@ -1,0 +1,50 @@
+Camera Calibration Hold-out Validation Report
+================================================
+
+Camera: 24213548
+  Intrinsics file: ./output\calibration_24213548.json
+  Training RMS (px): 8.210110737803381
+  Images validated: 10 (OK: 10)
+  Pixel reprojection error |e| (px):
+    mean   = 2.5676
+    median = 2.2300
+    p95    = 5.4822
+    max    = 13.8259
+  Angular error (small-angle) (rad):
+    theta_x: mean=1.943671e-05, p95=5.095105e-05  (~0.051 mrad p95)
+    theta_y: mean=2.221101e-05, p95=5.251872e-05  (~0.053 mrad p95)
+  Per-frame summary (only OK frames shown):
+    24213548_20260221201628.bmp: N=115, mean=2.842px, p95=5.330px, max=13.775px
+    24213548_20260221201643.bmp: N=100, mean=2.364px, p95=4.621px, max=7.707px
+    24213548_20260221201652.bmp: N=121, mean=2.856px, p95=6.914px, max=11.491px
+    24213548_20260221201705.bmp: N=98, mean=1.763px, p95=3.684px, max=6.354px
+    24213548_20260221201713.bmp: N=115, mean=2.720px, p95=4.922px, max=10.383px
+    24213548_20260221201725.bmp: N=108, mean=2.115px, p95=4.453px, max=6.825px
+    24213548_20260221201733.bmp: N=111, mean=3.205px, p95=6.418px, max=9.019px
+    24213548_20260221201747.bmp: N=121, mean=3.290px, p95=6.354px, max=13.826px
+    24213548_20260221201756.bmp: N=105, mean=2.107px, p95=3.963px, max=9.172px
+    24213548_20260221201809.bmp: N=104, mean=2.128px, p95=4.031px, max=7.742px
+
+Camera: 25332589
+  Intrinsics file: ./output\calibration_25332589.json
+  Training RMS (px): 2.7997255081704684
+  Images validated: 10 (OK: 10)
+  Pixel reprojection error |e| (px):
+    mean   = 1.5629
+    median = 1.3515
+    p95    = 3.7812
+    max    = 6.4849
+  Angular error (small-angle) (rad):
+    theta_x: mean=1.551400e-05, p95=4.636847e-05  (~0.046 mrad p95)
+    theta_y: mean=1.735476e-05, p95=4.527346e-05  (~0.045 mrad p95)
+  Per-frame summary (only OK frames shown):
+    25332589_20260221201636.bmp: N=110, mean=1.193px, p95=2.606px, max=3.750px
+    25332589_20260221201646.bmp: N=98, mean=1.042px, p95=2.261px, max=3.353px
+    25332589_20260221201655.bmp: N=107, mean=1.843px, p95=4.253px, max=5.502px
+    25332589_20260221201708.bmp: N=97, mean=1.080px, p95=2.100px, max=2.445px
+    25332589_20260221201715.bmp: N=115, mean=2.036px, p95=4.777px, max=5.724px
+    25332589_20260221201727.bmp: N=101, mean=1.269px, p95=2.514px, max=3.734px
+    25332589_20260221201736.bmp: N=108, mean=1.791px, p95=4.027px, max=4.882px
+    25332589_20260221201749.bmp: N=117, mean=2.200px, p95=4.451px, max=5.511px
+    25332589_20260221201803.bmp: N=99, mean=1.869px, p95=4.088px, max=6.485px
+    25332589_20260221201812.bmp: N=101, mean=1.112px, p95=2.273px, max=3.222px

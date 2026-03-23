@@ -45,7 +45,7 @@ def generate_diverse_poses(base_pose):
 
 if __name__ == "__main__":
     # 1. Initialize Controller
-    robot = SHERController(robot_name='SHER21')
+    robot = SHERController(robot_name='SHER20')
     
     # 2. Get safe starting position
     start_pose = robot.get_current_pose()

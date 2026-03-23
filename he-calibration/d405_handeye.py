@@ -84,7 +84,7 @@ class CharucoDetector:
 # ROBOT POSE TRACKER
 # ============================================================================
 class RobotTracker:
-    def __init__(self, topic="/SHER21/eye_robot/FrameEE"):
+    def __init__(self, topic="/SHER20/eye_robot/FrameEE"):
         self.pose = None
         self.count = 0
         rospy.Subscriber(topic, Transform, self._callback, queue_size=10)

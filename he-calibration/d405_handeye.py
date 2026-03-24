@@ -2,6 +2,7 @@
 Hand-Eye Calibration: Fixed Camera + Moving Target on Robot
 Goal: Find T_cam2base transformation matrix
 """
+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
 
 import numpy as np
 import cv2
@@ -11,6 +12,7 @@ from geometry_msgs.msg import Transform
 from scipy.spatial.transform import Rotation
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui
+from sensor_msgs.msg import Image, CameraInfo
 
 
 # ============================================================================
@@ -31,31 +33,53 @@ MIN_ROTATION_DEG = 5.0  # Minimum rotation between samples
 # ============================================================================
 # CAMERA
 # ============================================================================
+
 class RealSenseCamera:
     def __init__(self):
-        self.pipeline = rs.pipeline()
-        config = rs.config()
-        config.enable_stream(rs.stream.color, CAMERA_W, CAMERA_H, rs.format.bgr8, CAMERA_FPS)
+        self.frame = None
+        self.K = None
+        self.dist = None
 
-        profile = self.pipeline.start(config)
-        intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+        rospy.Subscriber("/d405/color/image_raw", Image, self._image_callback, queue_size=1, buff_size=2**24)
+        rospy.Subscriber("/d405/color/camera_info", CameraInfo, self._info_callback, queue_size=1)
 
-        self.K = np.array([[intr.fx, 0, intr.ppx],
-                           [0, intr.fy, intr.ppy],
-                           [0, 0, 1]])
-        self.dist = np.array(intr.coeffs[:5])
+        print("Waiting for camera info...")
+        timeout = 10.0
+        start = rospy.Time.now().to_sec()
+        while self.K is None:
+            rospy.sleep(0.05)
+            if rospy.Time.now().to_sec() - start > timeout:
+                raise RuntimeError("Timeout waiting for /d405/color/camera_info")
 
-        print(f"Camera initialized: {CAMERA_W}x{CAMERA_H} @ {CAMERA_FPS}fps")
-        print(f"Intrinsics: fx={intr.fx:.1f}, fy={intr.fy:.1f}, cx={intr.ppx:.1f}, cy={intr.ppy:.1f}")
+        print(f"Camera ready: K=\n{self.K}")
+        print(f"Distortion: {self.dist}")
+
+    def _info_callback(self, msg):
+        if self.K is None:
+            self.K = np.array(msg.K).reshape(3, 3)
+            self.dist = np.array(msg.D[:5])
+
+    def _image_callback(self, msg):
+        # Manual decode — avoids cv_bridge Python 2/3 mismatch on Melodic
+        dtype = np.uint8
+        frame = np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width, -1)
+
+        # Convert encoding to BGR for OpenCV
+        if msg.encoding == "rgb8":
+            self.frame = frame[:, :, ::-1].copy()   # RGB -> BGR
+        elif msg.encoding == "bgr8":
+            self.frame = frame.copy()
+        elif msg.encoding == "mono8":
+            self.frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        else:
+            # Fallback: assume RGB
+            self.frame = frame[:, :, ::-1].copy()
 
     def get_frame(self):
-        frames = self.pipeline.wait_for_frames()
-        color = frames.get_color_frame()
-        return np.asanyarray(color.get_data()) if color else None
+        return self.frame.copy() if self.frame is not None else None
 
     def stop(self):
-        self.pipeline.stop()
-
+        pass  # Nothing to clean up — camera managed externally
 
 # ============================================================================
 # CHARUCO DETECTOR

@@ -1,0 +1,67 @@
+# Autonomous trocar insertion (ATI) leica stereo camera params
+# Place in dir: /home/tianle/catkin_ws/src/spinnaker_sdk_camera_driver/params/ATI_stereo_params.yaml
+
+
+# FLIR Blackfly S stereo pair — Leica microscope cameras
+# Primary:   24213548 cam_left  (Line2 out -> triggers secondary)
+# Secondary: 25332589 cam_right (Line3 in  <- hardware triggered)
+
+cam_ids:
+  - 24213548
+  - 25332589
+
+cam_aliases:
+  - cam_left
+  - cam_right
+
+master_cam: 24213548
+
+save_type: .bmp
+binning: 1
+color: false
+soft_framerate: 2
+exposure_time: 0
+gain: 0
+target_grey_value: 0
+skip: 20
+delay: 1.0
+
+utstamps: false
+external_trigger: false
+
+to_ros: true
+live: false
+save: false
+
+image_height: 2048
+image_width: 2448
+
+distortion_model: plumb_bob
+intrinsic_coeffs:
+  - [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+  - [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+distortion_coeffs:
+  - [0.0, 0.0, 0.0, 0.0]
+  - [0.0, 0.0, 0.0, 0.0]
+
+rectification_coeffs:
+  - [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+  - [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+projection_coeffs:
+  - [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+  - [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+flip_horizontal:
+  - false
+  - false
+
+flip_vertical:
+  - false
+  - false
+
+
+# Launch:
+# roslaunch spinnaker_sdk_camera_driver acquisition.launch \ config_file:=/home/tianle/catkin_ws/src/spinnaker_sdk_camera_driver/params/ATI_stereo_params.yaml
+# rosrun rqt_image_view rqt_image_view

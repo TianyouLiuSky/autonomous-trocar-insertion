@@ -2,6 +2,15 @@
 Unified synchronized recorder for microscope video, Intel D405 depth camera, and robot data.
 All data is synchronized at 25Hz (depth camera rate).
 """
+# initial version 25Mar2026 imported from Tianle Wu
+# Edits: Added stereo leica flir cam_left and cam_right to QT UI
+# TODO: Add stereo leica depth map
+
+# Needs 3 nodelets to run: decklink (leica), d405, and flir_driver
+# decklink: roslaunch gscam gscam_decklink.launch
+# d405: roslaunch realsense2_camera d405_eyerobot_tianle.launch
+# Flir: roslaunch spinnaker_sdk_camera_driver acquisition.launch
+# Optional: ROS1 multi master for unified ros_core across SHER20, camera, SHER21 computers: roslaunch center_multimaster.launch 
 
 import os
 import cv2
@@ -16,8 +25,14 @@ import threading
 import queue
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui
-from GUI_subscriber.utils.image_conversion_without_using_ros import image_to_numpy
-from GUI_subscriber.dumb_demo.robot_subscriber_messy import TestSub
+# TODO: replace stub with real import once GUI_subscriber package is available
+# from GUI_subscriber.dumb_demo.robot_subscriber_messy import TestSub
+class TestSub:
+    """Stub for robot logger — no-op until GUI_subscriber package is integrated."""
+    def is_ready_to_log(self): return True
+    def log_trigger(self, timestamp): pass
+    def clear(self): pass
+    def save_csv(self, path): print(f"[TestSub stub] save_csv called (no-op): {path}")
 
 
 # --- Video Writer Helper Classes ---
@@ -71,16 +86,15 @@ class DepthRecorder:
     """Records depth frames with camera info metadata."""
 
     def __init__(self, max_buffer_bytes: int = 1_000_000_000):
-        self.frames = []          # List of depth frames (current chunk)
-        self.timestamps = []      # Corresponding timestamps (current chunk)
+        self.frames = []
+        self.timestamps = []
         self.camera_info = None
 
         self.max_buffer_bytes = max_buffer_bytes
         self._buffer_bytes = 0
-        self._base_prefix = None  # e.g. /path/to/session/intel_depth
+        self._base_prefix = None
         self._chunk_idx = 0
 
-        # Background writer
         self._save_queue = queue.Queue()
         self._writer_thread = threading.Thread(
             target=self._writer_loop, daemon=True
@@ -88,10 +102,6 @@ class DepthRecorder:
         self._writer_thread.start()
 
     def start_session(self, base_prefix: str):
-        """
-        Called at the start of each recording session.
-        base_prefix example: '/.../session_xxx/intel_depth'
-        """
         self._base_prefix = base_prefix
         self.frames = []
         self.timestamps = []
@@ -99,15 +109,6 @@ class DepthRecorder:
         self._chunk_idx = 0
 
     def add_frame(self, depth_mm: np.ndarray, timestamp: float):
-        """
-        Stores depth in 0.01mm precision using uint16.
-        Original: uint16 millimeters (0-65535mm)
-        Stored: uint16 in 0.01mm units (0-655.35mm with 0.01mm precision)
-
-        Args:
-            depth_mm: Depth array in millimeters
-            timestamp: Synchronized timestamp (from time.time()) at sync trigger
-        """
         depth_001mm = np.clip(
             depth_mm.astype(np.uint32) * 100, 0, 65535
         ).astype(np.uint16)
@@ -116,7 +117,6 @@ class DepthRecorder:
         self.timestamps.append(timestamp)
         self._buffer_bytes += depth_001mm.nbytes
 
-        # When buffer grows beyond threshold, dump current chunk to disk
         if (
             self._base_prefix is not None
             and self._buffer_bytes >= self.max_buffer_bytes
@@ -124,7 +124,6 @@ class DepthRecorder:
             self._flush_async()
 
     def set_camera_info(self, camera_info: CameraInfo):
-        """Store camera intrinsics."""
         if self.camera_info is None:
             self.camera_info = {
                 'width': camera_info.width,
@@ -138,7 +137,6 @@ class DepthRecorder:
             }
 
     def _flush_async(self):
-        """Move current in-memory chunk to background writer."""
         if not self.frames:
             return
 
@@ -151,7 +149,6 @@ class DepthRecorder:
         self._save_queue.put((idx, frames, timestamps))
 
     def _writer_loop(self):
-        """Background thread that writes chunks to disk."""
         while True:
             item = self._save_queue.get()
             if item is None:
@@ -174,22 +171,13 @@ class DepthRecorder:
             self._save_queue.task_done()
 
     def save(self, filepath: str):
-        """
-        Finalize saving.
-        If no chunking happened, behaves like before and writes a single NPZ.
-        If chunking happened, writes remaining frames as a final chunk and
-        leaves you with multiple files:
-            <base>_chunk0000.npz, <base>_chunk0001.npz, ...
-        """
         if not self.frames and self._chunk_idx == 0:
             print("[DepthRecorder] No frames to save.")
             return
 
         if self._base_prefix is None:
-            # Derive base prefix from the requested filepath
             self._base_prefix = os.path.splitext(filepath)[0]
 
-        # No chunking: single file, original behavior
         if self._chunk_idx == 0:
             depth_array = np.stack(self.frames, axis=0)
             np.savez_compressed(
@@ -203,25 +191,53 @@ class DepthRecorder:
             print(f"[DepthRecorder] Saved {len(self.frames)} frames to: {filepath}")
             print(f"[DepthRecorder] File size: {os.path.getsize(filepath) / 1024 / 1024:.2f} MB")
         else:
-            # We already wrote one or more chunks.
-            # Flush the remaining in-memory frames as a final chunk.
             if self.frames:
                 self._flush_async()
 
-            # Wait for all chunks to finish writing
             self._save_queue.join()
-
-            # Stop writer thread cleanly (optional for short-lived process)
             self._save_queue.put(None)
             self._save_queue.join()
 
             print(f"[DepthRecorder] Saved {self._chunk_idx} chunks with prefix: {self._base_prefix}_chunkXXXX")
 
     def clear(self):
-        """Reset in-memory buffers for a new session (does not touch files)."""
         self.frames = []
         self.timestamps = []
         self._buffer_bytes = 0
+
+
+# --- FLIR Camera Subscriber ---
+def _decode_flir_image(msg: Image) -> np.ndarray:
+    """
+    Manual decode for FLIR sensor_msgs/Image — avoids cv_bridge on ROS1 Melodic.
+    Returns an RGB uint8 array, or None on failure.
+    FLIR BFS cameras typically publish mono8 or rgb8; handles both.
+    """
+    try:
+        dtype = np.uint8
+        arr = np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width, -1) \
+            if msg.encoding not in ("mono8", "bayer_rggb8") \
+            else np.frombuffer(msg.data, dtype=dtype).reshape(msg.height, msg.width)
+
+        if msg.encoding == "rgb8":
+            return arr  # already RGB
+        elif msg.encoding == "bgr8":
+            return arr[:, :, ::-1].copy()  # BGR -> RGB
+        elif msg.encoding == "mono8":
+            return cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+        elif msg.encoding == "bayer_rggb8":
+            return cv2.cvtColor(arr, cv2.COLOR_BayerBG2RGB)
+        else:
+            # Fallback: assume first 3 channels are usable as RGB
+            return arr[:, :, :3].copy()
+    except Exception as e:
+        print(f"[FLIR decode] Failed: {e}")
+        return None
+
+
+def _to_display(arr_rgb: np.ndarray) -> np.ndarray:
+    """Transpose and flip for PyQtGraph display (shared helper)."""
+    return np.transpose(np.flipud(arr_rgb), (1, 0, 2))
 
 
 # --- Main Unified Recorder ---
@@ -230,19 +246,20 @@ class UnifiedRecorder(QtWidgets.QWidget):
         self,
         microscope_topic: str = "/decklink/camera/image_raw",
         intel_rgb_topic: str = "/d405/color/image_raw",
-        intel_depth_topic: str = "/d405/aligned_depth_to_color/image_raw",  # <--- CRITICAL: Aligned topic
+        intel_depth_topic: str = "/d405/aligned_depth_to_color/image_raw",
         intel_camera_info_topic: str = "/d405/color/camera_info",
+        flir_left_topic: str = "/camera_array/cam_left/image_raw",
+        flir_right_topic: str = "/camera_array/cam_right/image_raw",
         backend: str = "ffmpeg",
         out_dir: str = "unified_recordings",
         sync_fps: float = 25.0,
         ocv_fourcc: str = "mp4v",
         x264_crf: int = 23,
         x264_preset: str = "veryfast",
-        invert_depth_colormap: bool = False  # Set to True if colormap looks reversed
+        invert_depth_colormap: bool = False
     ):
         super().__init__()
 
-        # Configuration
         self.bridge = CvBridge()
         self.invert_depth_colormap = invert_depth_colormap
         self.backend = backend
@@ -252,25 +269,30 @@ class UnifiedRecorder(QtWidgets.QWidget):
         self.x264_crf = x264_crf
         self.x264_preset = x264_preset
 
-        # Setup UI
-        self.setWindowTitle("Unified Recorder (Microscope + Intel D405 + Robot)")
+        self.setWindowTitle("Unified Recorder (Microscope + Stereo FLIR + Intel D405 + Robot)")
         self.setup_ui()
 
-        # Data buffers (latest frame from each source)
+        # --- Latest raw frames (BGR/RGB for video writing) ---
         self.latest_microscope = None
         self.latest_intel_rgb = None
         self.latest_intel_depth = None
+        self.latest_flir_left = None   # RGB uint8
+        self.latest_flir_right = None  # RGB uint8
 
-        # Display buffers (transposed for PyQtGraph)
+        # --- Display buffers (transposed for PyQtGraph) ---
         self.display_microscope = None
         self.display_intel_rgb = None
         self.display_intel_depth = None
+        self.display_flir_left = None
+        self.display_flir_right = None
 
         # Recording state
         self.recording = False
         self.microscope_writer = None
         self.intel_rgb_writer = None
-        self.depth_recorder = DepthRecorder(max_buffer_bytes=3_000_000_000)  # ~1 GB buffer
+        self.flir_left_writer = None
+        self.flir_right_writer = None
+        self.depth_recorder = DepthRecorder(max_buffer_bytes=3_000_000_000)
         self.robot_logger = TestSub()
         self.session_dir = None
 
@@ -279,223 +301,229 @@ class UnifiedRecorder(QtWidgets.QWidget):
         self.measured_fps = None
         self.fps_measurement_complete = False
 
-        # Subscribe to topics
+        # --- ROS Subscribers ---
         rospy.Subscriber(microscope_topic, Image, self.microscope_callback, queue_size=1, buff_size=2 ** 24)
         rospy.Subscriber(intel_rgb_topic, Image, self.intel_rgb_callback, queue_size=1, buff_size=2 ** 24)
         rospy.Subscriber(intel_depth_topic, Image, self.intel_depth_callback, queue_size=1, buff_size=2 ** 24)
         rospy.Subscriber(intel_camera_info_topic, CameraInfo, self.camera_info_callback, queue_size=1)
+        rospy.Subscriber(flir_left_topic, Image, self.flir_left_callback, queue_size=1, buff_size=2 ** 24)
+        rospy.Subscriber(flir_right_topic, Image, self.flir_right_callback, queue_size=1, buff_size=2 ** 24)
 
-        # GUI refresh timer
+        print(f"[UnifiedRecorder] Subscribed to FLIR left:  {flir_left_topic}")
+        print(f"[UnifiedRecorder] Subscribed to FLIR right: {flir_right_topic}")
+
+        # GUI refresh timer ~60Hz
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.tick)
-        self.timer.start(16)  # ~60Hz GUI refresh
+        self.timer.start(16)
 
-        # Cleanup on exit
         QtWidgets.QApplication.instance().aboutToQuit.connect(self.cleanup)
 
         print("[UnifiedRecorder] Initialized")
         print(f"[UnifiedRecorder] Syncing at {sync_fps} Hz (depth camera rate)")
 
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
     def setup_ui(self):
-        """Create the UI with 3 video displays."""
-        # Record button
+        """
+        Layout:
+          Top row:    [FLIR Left] | [Microscope] | [FLIR Right]
+          Bottom row: [Intel RGB] | [Intel Depth]
+          Controls:   [Record btn] [Status]
+        """
+
+        def _make_view(label_text: str):
+            """Helper: returns (container_widget, pg.ImageItem)."""
+            win = pg.GraphicsLayoutWidget()
+            view = win.addViewBox()
+            view.setAspectLocked(True)
+            view.invertY(False)
+            img_item = pg.ImageItem()
+            view.addItem(img_item)
+
+            lbl = QtWidgets.QLabel(label_text)
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+
+            container = QtWidgets.QWidget()
+            layout = QtWidgets.QVBoxLayout(container)
+            layout.setContentsMargins(2, 2, 2, 2)
+            layout.addWidget(lbl)
+            layout.addWidget(win)
+            return container, img_item
+
+        # --- Top row: stereo + microscope ---
+        flir_left_widget,  self.img_flir_left   = _make_view("FLIR Cam Left")
+        microscope_widget, self.img_microscope   = _make_view("Microscope (60 Hz)")
+        flir_right_widget, self.img_flir_right   = _make_view("FLIR Cam Right")
+
+        top_row = QtWidgets.QHBoxLayout()
+        top_row.addWidget(flir_left_widget,  stretch=1)
+        top_row.addWidget(microscope_widget, stretch=2)   # microscope gets more width
+        top_row.addWidget(flir_right_widget, stretch=1)
+
+        # --- Bottom row: Intel RGB + Depth ---
+        intel_rgb_widget,   self.img_intel_rgb   = _make_view("Intel D405 RGB (25 Hz)")
+        intel_depth_widget, self.img_intel_depth = _make_view("Intel D405 Depth (25 Hz)")
+
+        bottom_row = QtWidgets.QHBoxLayout()
+        bottom_row.addWidget(intel_rgb_widget)
+        bottom_row.addWidget(intel_depth_widget)
+
+        # --- Controls ---
         self.btn = QtWidgets.QPushButton("Start REC [S]")
         self.btn.setCheckable(True)
         self.btn.clicked.connect(self.toggle_record)
 
-        # Status label
         self.status_label = QtWidgets.QLabel("Ready")
         self.status_label.setAlignment(QtCore.Qt.AlignCenter)
 
-        # Graphics windows for video display
-        self.win_microscope = pg.GraphicsLayoutWidget()
-        self.view_microscope = self.win_microscope.addViewBox()
-        self.img_microscope = pg.ImageItem()
-        self.view_microscope.addItem(self.img_microscope)
-        self.view_microscope.setAspectLocked(True)
+        ctrl_row = QtWidgets.QHBoxLayout()
+        ctrl_row.addWidget(self.btn)
+        ctrl_row.addWidget(self.status_label, stretch=1)
 
-        self.win_intel_rgb = pg.GraphicsLayoutWidget()
-        self.view_intel_rgb = self.win_intel_rgb.addViewBox()
-        self.img_intel_rgb = pg.ImageItem()
-        self.view_intel_rgb.addItem(self.img_intel_rgb)
-        self.view_intel_rgb.setAspectLocked(True)
-
-        self.win_intel_depth = pg.GraphicsLayoutWidget()
-        self.view_intel_depth = self.win_intel_depth.addViewBox()
-        self.img_intel_depth = pg.ImageItem()
-        self.view_intel_depth.addItem(self.img_intel_depth)
-        self.view_intel_depth.setAspectLocked(True)
-
-        # Labels
-        label_microscope = QtWidgets.QLabel("Microscope (60Hz)")
-        label_microscope.setAlignment(QtCore.Qt.AlignCenter)
-        label_intel_rgb = QtWidgets.QLabel("Intel D405 RGB (25Hz)")
-        label_intel_rgb.setAlignment(QtCore.Qt.AlignCenter)
-        label_intel_depth = QtWidgets.QLabel("Intel D405 Depth (25Hz)")
-        label_intel_depth.setAlignment(QtCore.Qt.AlignCenter)
-
-        # Layout: Top row = microscope, Bottom row = intel RGB + depth
-        top_layout = QtWidgets.QVBoxLayout()
-        top_layout.addWidget(label_microscope)
-        top_layout.addWidget(self.win_microscope)
-
-        bottom_left = QtWidgets.QVBoxLayout()
-        bottom_left.addWidget(label_intel_rgb)
-        bottom_left.addWidget(self.win_intel_rgb)
-
-        bottom_right = QtWidgets.QVBoxLayout()
-        bottom_right.addWidget(label_intel_depth)
-        bottom_right.addWidget(self.win_intel_depth)
-
-        bottom_layout = QtWidgets.QHBoxLayout()
-        bottom_layout.addLayout(bottom_left)
-        bottom_layout.addLayout(bottom_right)
-
+        # --- Main layout ---
         main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.addWidget(self.btn)
-        main_layout.addWidget(self.status_label)
-        main_layout.addLayout(top_layout, stretch=1)
-        main_layout.addLayout(bottom_layout, stretch=1)
+        main_layout.addLayout(ctrl_row)
+        main_layout.addLayout(top_row,    stretch=3)
+        main_layout.addLayout(bottom_row, stretch=2)
 
-        self.resize(1600, 1000)
+        self.resize(1800, 1000)
         self.show()
 
-        # Keyboard shortcut
         QtWidgets.QShortcut(QtGui.QKeySequence("S"), self, activated=self.btn.click)
 
-    # --- Callbacks ---
+    # ------------------------------------------------------------------
+    # ROS Callbacks
+    # ------------------------------------------------------------------
     def microscope_callback(self, msg: Image):
-        """Store latest microscope frame."""
-        arr = image_to_numpy(msg)
-        if arr is None:
+        """Manual decode — mirrors _decode_flir_image but kept separate
+        since the decklink card may publish uyvy/yuyv422 or mono formats."""
+        try:
+            if msg.encoding in ("mono8", "bayer_rggb8"):
+                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width)
+                arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+            elif msg.encoding == "mono16":
+                arr = np.frombuffer(msg.data, dtype=np.uint16).reshape(msg.height, msg.width)
+                arr = (arr >> 8).astype(np.uint8)          # scale to 8-bit
+                arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+            elif msg.encoding in ("yuv422", "yuyv422", "uyvy"):
+                raw = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 2)
+                code = cv2.COLOR_YUV2RGB_UYVY if msg.encoding == "uyvy" else cv2.COLOR_YUV2RGB_YUYV
+                arr = cv2.cvtColor(raw, code)
+            elif msg.encoding == "bgr8":
+                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3)
+                arr = arr[:, :, ::-1].copy()               # BGR -> RGB
+            elif msg.encoding == "rgba8":
+                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 4)
+                arr = arr[:, :, :3]                        # drop alpha
+            else:
+                # Default: assume rgb8 / 3-channel uint8
+                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, -1)
+                arr = arr[:, :, :3]
+        except Exception as e:
+            print(f"[microscope_callback] Decode failed (encoding={msg.encoding}): {e}")
             return
-        if arr.dtype != np.uint8:
-            arr = np.clip(arr, 0, 255).astype(np.uint8)
 
         self.latest_microscope = arr
-
-        # Prepare for display (transpose for PyQtGraph)
         if arr.ndim == 3:
-            self.display_microscope = np.transpose(np.flipud(arr), (1, 0, 2))
+            self.display_microscope = _to_display(arr)
         else:
             self.display_microscope = np.transpose(np.flipud(arr), (1, 0))
 
     def intel_rgb_callback(self, msg: Image):
-        """Store latest Intel RGB frame."""
-        # RealSense publishes in BGR8 format (not RGB8)
         arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3)
-        self.latest_intel_rgb = arr  # Keep as BGR for video writing
-
-        # Convert BGR to RGB for display
-        # arr_rgb = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
-        arr_rgb = arr
-        self.display_intel_rgb = np.transpose(np.flipud(arr_rgb), (1, 0, 2))
+        self.latest_intel_rgb = arr  # BGR for writing
+        self.display_intel_rgb = _to_display(arr)
 
     def intel_depth_callback(self, msg: Image):
-        """
-        SYNC TRIGGER: This is the 25Hz callback that triggers all synchronized logging.
-        """
-        # Store depth frame (uint16 millimeters)
+        """SYNC TRIGGER — 25 Hz callback that drives all synchronized logging."""
         depth_mm = np.frombuffer(msg.data, dtype=np.uint16).reshape(msg.height, msg.width)
         self.latest_intel_depth = depth_mm
 
-        # Measure actual FPS during startup (first 50 frames)
+        # FPS measurement (first 50 depth frames)
         if not self.fps_measurement_complete:
             current_time = time.time()
             self.fps_measurement_window.append(current_time)
-
             if len(self.fps_measurement_window) >= 50:
                 time_span = self.fps_measurement_window[-1] - self.fps_measurement_window[0]
                 self.measured_fps = (len(self.fps_measurement_window) - 1) / time_span
                 self.fps_measurement_complete = True
                 print(f"[Recorder] Measured depth camera FPS: {self.measured_fps:.2f} Hz")
-                print(f"[Recorder] Videos will be saved at {self.measured_fps:.2f} fps for accurate playback")
 
-        # Create colorized depth for display
-        # D405 optimal range: 70-500mm
+        # Build colorized depth for display
         depth_normalized = np.clip((depth_mm.astype(float) - 70) / (500 - 70), 0, 1)
-
-        # Apply inversion if configured
         if self.invert_depth_colormap:
             depth_normalized = 1.0 - depth_normalized
-
-        # COLORMAP_JET: 0.0=blue, 1.0=red
-        # Default (no invert): close (70mm)→0.0→blue, far (500mm)→1.0→red
-        # Inverted: close (70mm)→1.0→red, far (500mm)→0.0→blue
         depth_colormap = cv2.applyColorMap((depth_normalized * 255).astype(np.uint8), cv2.COLORMAP_JET)
 
-        # Add color reference bar
-        bar_height = 30
-        bar_width = depth_colormap.shape[1]
-        color_bar = np.zeros((bar_height, bar_width, 3), dtype=np.uint8)
-
-        # Create gradient bar
-        gradient = np.linspace(0, 255, bar_width).astype(np.uint8)
-        gradient = np.tile(gradient, (bar_height, 1))
+        bar_h, bar_w = 30, depth_colormap.shape[1]
+        gradient = np.tile(np.linspace(0, 255, bar_w).astype(np.uint8), (bar_h, 1))
         color_bar = cv2.applyColorMap(gradient, cv2.COLORMAP_JET)
+        close_lbl = "CLOSE" if not self.invert_depth_colormap else "FAR"
+        far_lbl   = "FAR"   if not self.invert_depth_colormap else "CLOSE"
+        cv2.putText(color_bar, close_lbl, (10, 20),          cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        cv2.putText(color_bar, far_lbl,   (bar_w - 60, 20),  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-        # Add labels
-        label_text = "CLOSE" if not self.invert_depth_colormap else "FAR"
-        cv2.putText(color_bar, label_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        label_text = "FAR" if not self.invert_depth_colormap else "CLOSE"
-        cv2.putText(color_bar, label_text, (bar_width-60, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        self.display_intel_depth = _to_display(np.vstack([color_bar, depth_colormap]))
 
-        # Combine depth image with color bar
-        depth_with_bar = np.vstack([color_bar, depth_colormap])
-
-        self.display_intel_depth = np.transpose(np.flipud(depth_with_bar), (1, 0, 2))
-
-        # --- SYNCHRONIZED LOGGING BLOCK ---
+        # --- Synchronized logging ---
         if self.recording and self.all_writers_ready():
             if self.robot_logger.is_ready_to_log():
-                # Create single synchronized timestamp for this frame
                 sync_timestamp = time.time()
-
-                # Log robot data with timestamp
                 self.robot_logger.log_trigger(sync_timestamp)
 
-                # Write microscope frame
                 if self.latest_microscope is not None:
                     self.write_frame(self.microscope_writer, self.latest_microscope)
-
-                # Write Intel RGB frame
                 if self.latest_intel_rgb is not None:
                     self.write_frame(self.intel_rgb_writer, self.latest_intel_rgb)
+                if self.latest_flir_left is not None:
+                    self.write_frame(self.flir_left_writer, self.latest_flir_left)
+                if self.latest_flir_right is not None:
+                    self.write_frame(self.flir_right_writer, self.latest_flir_right)
 
-                # Record depth frame with same timestamp
                 self.depth_recorder.add_frame(depth_mm, sync_timestamp)
             else:
-                # Add this to see if the robot is holding you back
-                print(f"[Debug] Robot logger not ready! Recording skipped for this frame.")
+                print("[Debug] Robot logger not ready — frame skipped.")
 
     def camera_info_callback(self, msg: CameraInfo):
-        """Store camera intrinsics."""
         self.depth_recorder.set_camera_info(msg)
 
-    # --- Recording Management ---
+    def flir_left_callback(self, msg: Image):
+        arr = _decode_flir_image(msg)
+        if arr is None:
+            return
+        self.latest_flir_left = arr
+        self.display_flir_left = _to_display(arr)
+
+    def flir_right_callback(self, msg: Image):
+        arr = _decode_flir_image(msg)
+        if arr is None:
+            return
+        self.latest_flir_right = arr
+        self.display_flir_right = _to_display(arr)
+
+    # ------------------------------------------------------------------
+    # Recording Management
+    # ------------------------------------------------------------------
     def toggle_record(self):
-        """Start/stop recording."""
         if not self.recording:
-            # --- START RECORDING ---
             if not self.check_frames_available():
                 print("[Recorder] Waiting for all camera frames...")
                 self.btn.setChecked(False)
                 self.status_label.setText("Waiting for frames...")
                 return
 
-            # Wait for FPS measurement to complete
             if not self.fps_measurement_complete:
                 print("[Recorder] Measuring camera FPS, please wait...")
                 self.btn.setChecked(False)
                 self.status_label.setText(f"Measuring FPS ({len(self.fps_measurement_window)}/50)...")
                 return
 
-            # Create session directory
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.session_dir = os.path.join(self.out_dir, f"session_{timestamp}")
             os.makedirs(self.session_dir, exist_ok=True)
 
-            # Initialize writers
             self.create_writers()
 
             if not self.all_writers_ready():
@@ -504,13 +532,11 @@ class UnifiedRecorder(QtWidgets.QWidget):
                 self.status_label.setText("Writer creation failed")
                 return
 
-            # Clear buffers / start new depth session
             self.robot_logger.clear()
             self.depth_recorder.start_session(
                 os.path.join(self.session_dir, "intel_depth")
             )
 
-            # Start recording
             self.recording = True
             self.btn.setText("Stop REC [S]")
             self.btn.setChecked(True)
@@ -518,99 +544,118 @@ class UnifiedRecorder(QtWidgets.QWidget):
             print(f"[Recorder] Started recording to: {self.session_dir}")
 
         else:
-            # --- STOP RECORDING ---
             self.recording = False
             self.btn.setText("Start REC [S]")
             self.btn.setChecked(False)
             self.status_label.setText("Saving files...")
 
-            # Save all data
             self.save_all_data()
-
-            # Cleanup
             self.release_writers()
 
             self.status_label.setText(f"Saved to {self.session_dir}")
             print(f"[Recorder] Recording complete: {self.session_dir}")
 
     def check_frames_available(self) -> bool:
-        """Check if we have at least one frame from all sources."""
-        return (self.latest_microscope is not None and
-                self.latest_intel_rgb is not None and
-                self.latest_intel_depth is not None)
+        """
+        Core sources (microscope + intel) must be present.
+        FLIR frames are optional — we won't block recording if cameras
+        aren't publishing yet (e.g. during bench testing without stereo rig).
+        """
+        return (
+            self.latest_microscope is not None
+            and self.latest_intel_rgb is not None
+            and self.latest_intel_depth is not None
+        )
 
     def create_writers(self):
-        """Create video writers for microscope and Intel RGB."""
-        # Use measured FPS for accurate playback
-        fps_to_use = self.measured_fps if self.measured_fps else self.sync_fps
+        fps = self.measured_fps if self.measured_fps else self.sync_fps
 
         if self.latest_microscope is not None:
             h, w = self.latest_microscope.shape[:2]
             path = os.path.join(self.session_dir, "microscope.mp4")
             self.microscope_writer = _make_writer(
-                backend=self.backend, path=path, w=w, h=h, fps=fps_to_use,
+                self.backend, path, w, h, fps,
                 fourcc=self.ocv_fourcc, crf=self.x264_crf, preset=self.x264_preset
             )
-            print(f"[Recorder] Created microscope writer: {path} @ {fps_to_use:.2f} fps")
+            print(f"[Recorder] Created microscope writer: {path}")
 
         if self.latest_intel_rgb is not None:
             h, w = self.latest_intel_rgb.shape[:2]
             path = os.path.join(self.session_dir, "intel_rgb.mp4")
             self.intel_rgb_writer = _make_writer(
-                backend=self.backend, path=path, w=w, h=h, fps=fps_to_use,
+                self.backend, path, w, h, fps,
                 fourcc=self.ocv_fourcc, crf=self.x264_crf, preset=self.x264_preset
             )
-            print(f"[Recorder] Created Intel RGB writer: {path} @ {fps_to_use:.2f} fps")
+            print(f"[Recorder] Created Intel RGB writer: {path}")
+
+        # FLIR writers — created only if frames are available; non-blocking
+        if self.latest_flir_left is not None:
+            h, w = self.latest_flir_left.shape[:2]
+            path = os.path.join(self.session_dir, "flir_left.mp4")
+            self.flir_left_writer = _make_writer(
+                self.backend, path, w, h, fps,
+                fourcc=self.ocv_fourcc, crf=self.x264_crf, preset=self.x264_preset
+            )
+            print(f"[Recorder] Created FLIR left writer:  {path}")
+        else:
+            print("[Recorder] FLIR left not available — skipping writer.")
+
+        if self.latest_flir_right is not None:
+            h, w = self.latest_flir_right.shape[:2]
+            path = os.path.join(self.session_dir, "flir_right.mp4")
+            self.flir_right_writer = _make_writer(
+                self.backend, path, w, h, fps,
+                fourcc=self.ocv_fourcc, crf=self.x264_crf, preset=self.x264_preset
+            )
+            print(f"[Recorder] Created FLIR right writer: {path}")
+        else:
+            print("[Recorder] FLIR right not available — skipping writer.")
 
     def all_writers_ready(self) -> bool:
-        """Check if all writers are initialized."""
-        return (self.microscope_writer is not None and
-                self.intel_rgb_writer is not None)
+        """Core writers (microscope + intel) must exist; FLIR writers are optional."""
+        return (
+            self.microscope_writer is not None
+            and self.intel_rgb_writer is not None
+        )
 
     def write_frame(self, writer: _BaseWriter, frame: np.ndarray):
-        """Convert and write frame to video file."""
-        # Handle grayscale (Depth or IR)
         if frame.ndim == 2:
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-
-        # Handle RGBA (some cameras)
         elif frame.shape[2] == 4:
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
         else:
             frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
         writer.write(frame_bgr)
 
     def save_all_data(self):
-        """Save robot data and depth data."""
         if self.session_dir is None:
             return
-
-        # Save robot data as CSV
         robot_csv = os.path.join(self.session_dir, "robot_data.csv")
         self.robot_logger.save_csv(robot_csv)
-
-        # Save depth data as compressed numpy
         depth_npy = os.path.join(self.session_dir, "intel_depth.npz")
         self.depth_recorder.save(depth_npy)
-
         print(f"[Recorder] All data saved to: {self.session_dir}")
 
     def release_writers(self):
-        """Release all video writers."""
-        if self.microscope_writer is not None:
-            self.microscope_writer.release()
-            self.microscope_writer = None
+        for attr in ("microscope_writer", "intel_rgb_writer", "flir_left_writer", "flir_right_writer"):
+            writer = getattr(self, attr, None)
+            if writer is not None:
+                writer.release()
+                setattr(self, attr, None)
 
-        if self.intel_rgb_writer is not None:
-            self.intel_rgb_writer.release()
-            self.intel_rgb_writer = None
-
-    # --- GUI Update ---
+    # ------------------------------------------------------------------
+    # GUI Update
+    # ------------------------------------------------------------------
     def tick(self):
-        """Update display at ~60Hz."""
+        """Refresh all display panels at ~60 Hz."""
+        if self.display_flir_left is not None:
+            self.img_flir_left.setImage(self.display_flir_left, autoLevels=False)
+
         if self.display_microscope is not None:
             self.img_microscope.setImage(self.display_microscope, autoLevels=False)
+
+        if self.display_flir_right is not None:
+            self.img_flir_right.setImage(self.display_flir_right, autoLevels=False)
 
         if self.display_intel_rgb is not None:
             self.img_intel_rgb.setImage(self.display_intel_rgb, autoLevels=False)
@@ -618,15 +663,20 @@ class UnifiedRecorder(QtWidgets.QWidget):
         if self.display_intel_depth is not None:
             self.img_intel_depth.setImage(self.display_intel_depth, autoLevels=False)
 
-        # Update status during FPS measurement
-        if not self.recording and not self.fps_measurement_complete:
-            fps_progress = len(self.fps_measurement_window)
-            self.status_label.setText(f"Measuring camera FPS... ({fps_progress}/50)")
-        elif not self.recording and self.fps_measurement_complete and self.measured_fps:
-            self.status_label.setText(f"Ready - Camera: {self.measured_fps:.1f} fps")
+        if not self.recording:
+            if not self.fps_measurement_complete:
+                self.status_label.setText(
+                    f"Measuring camera FPS... ({len(self.fps_measurement_window)}/50)"
+                )
+            elif self.measured_fps:
+                flir_l = "✓" if self.latest_flir_left  is not None else "✗"
+                flir_r = "✓" if self.latest_flir_right is not None else "✗"
+                self.status_label.setText(
+                    f"Ready  |  {self.measured_fps:.1f} fps  |  "
+                    f"FLIR L:{flir_l}  R:{flir_r}"
+                )
 
     def cleanup(self):
-        """Cleanup on exit."""
         if self.recording:
             print("[Recorder] Cleaning up on exit...")
             self.toggle_record()
@@ -641,12 +691,14 @@ if __name__ == "__main__":
     recorder = UnifiedRecorder(
         microscope_topic="/decklink/camera/image_raw",
         intel_rgb_topic="/d405/color/image_raw",
-        intel_depth_topic="/d405/aligned_depth_to_color/image_raw",  # <--- Aligned Depth
+        intel_depth_topic="/d405/aligned_depth_to_color/image_raw",
         intel_camera_info_topic="/d405/color/camera_info",
+        flir_left_topic="/camera_array/cam_left/image_raw",
+        flir_right_topic="/camera_array/cam_right/image_raw",
         backend="ffmpeg",
         out_dir=os.path.expanduser("~/Documents/unified_recordings"),
         sync_fps=25.0,
-        invert_depth_colormap=True  # Set to True if depth colors look reversed
+        invert_depth_colormap=True
     )
 
     app.exec_()

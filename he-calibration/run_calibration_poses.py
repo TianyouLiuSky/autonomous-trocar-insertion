@@ -62,9 +62,9 @@ if __name__ == "__main__":
         
         if success:
             print(f"Reached Target {i+1}. Switch to GUI and press SPACE now.")
-            # We give you 3 seconds to press Space in the other window
+            # We give you 15 seconds to press Space in the other window
             # Alternatively, you can increase this sleep time
-            time.sleep(10) 
+            time.sleep(15) 
         else:
             print(f"Failed to reach Target {i+1}, skipping...")
 

@@ -14,40 +14,40 @@ def generate_diverse_poses(base_pose):
     # 25 offsets to create a 'cloud' of points with different tilts
     # Format: [X, Y, Z, Roll, Pitch, Yaw]
     offsets = [
-        # Row 1: Pitched back (-14), Pulled out (-10 X), Slightly down (-5 Z)
-        [-10, -10, -5, -14, -14, 0],
-        [-10,  -5, -5,  -7, -14, 0],
-        [-10,   0, -5,   0, -14, 0],
-        [-10,   5, -5,   7, -14, 0],
-        [-10,  10, -5,  14, -14, 0],
+        # Row 1: Pitch -16
+        [-8, -8, 4, -16, -16, 0],
+        [-4, -8, 2,  -8, -16, 0],
+        [ 0, -8, 0,   0, -16, 0],
+        [ 4, -8, 2,   8, -16, 0],
+        [ 8, -8, 4,  16, -16, 0],
 
-        # Row 2: Snake backwards. Pitch (-7), X (-5), Z (-2)
-        [-5,  10, -2,  14,  -7, 0],
-        [-5,   5, -2,   7,  -7, 0],
-        [-5,   0, -2,   0,  -7, 0],
-        [-5,  -5, -2,  -7,  -7, 0],
-        [-5, -10, -2, -14,  -7, 0],
+        # Row 2: Pitch -8 (Snake backwards)
+        [ 8, -4, 2,  16,  -8, 0],
+        [ 4, -4, 1,   8,  -8, 0],
+        [ 0, -4, 0,   0,  -8, 0],
+        [-4, -4, 1,  -8,  -8, 0],
+        [-8, -4, 2, -16,  -8, 0],
 
-        # Row 3: Dead Center. Snake forwards.
-        [ 0, -10,  0, -14,   0, 0],
-        [ 0,  -5,  0,  -7,   0, 0],
-        [ 0,   0,  0,   0,   0, 0],  # 13: True Home
-        [ 0,   5,  0,   7,   0, 0],
-        [ 0,  10,  0,  14,   0, 0],
+        # Row 3: Pitch 0 (Center sweep)
+        [-8,  0, 0, -16,   0, 0],
+        [-4,  0, 0,  -8,   0, 0],
+        [ 0,  0, 0,   0,   0, 0], # Home Center
+        [ 4,  0, 0,   8,   0, 0],
+        [ 8,  0, 0,  16,   0, 0],
 
-        # Row 4: Snake backwards. Pitch (+7), X (+5), Z (+2)
-        [ 5,  10,  2,  14,   7, 0],
-        [ 5,   5,  2,   7,   7, 0],
-        [ 5,   0,  2,   0,   7, 0],
-        [ 5,  -5,  2,  -7,   7, 0],
-        [ 5, -10,  2, -14,   7, 0],
+        # Row 4: Pitch 8 (Snake backwards)
+        [ 8,  4, 2,  16,   8, 0],
+        [ 4,  4, 1,   8,   8, 0],
+        [ 0,  4, 0,   0,   8, 0],
+        [-4,  4, 1,  -8,   8, 0],
+        [-8,  4, 2, -16,   8, 0],
 
-        # Row 5: Pitched forward (+14), Pushed in (+10 X), Slightly up (+5 Z)
-        [ 10, -10,  5, -14,  14, 0],
-        [ 10,  -5,  5,  -7,  14, 0],
-        [ 10,   0,  5,   0,  14, 0],
-        [ 10,   5,  5,   7,  14, 0],
-        [ 10,  10,  5,  14,  14, 0],
+        # Row 5: Pitch 16
+        [-8,  8, 4, -16,  16, 0],
+        [-4,  8, 2,  -8,  16, 0],
+        [ 0,  8, 0,   0,  16, 0],
+        [ 4,  8, 2,   8,  16, 0],
+        [ 8,  8, 4,  16,  16, 0],
     ]
     
     for offset in offsets:
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         print(f"\nMoving to Pose {i+1}/25: {target}")
         
         # Move robot (No RCM for calibration)
-        success = robot.no_rcm_move_to(target, timeout=30.0)
+        success = robot.no_rcm_move_to(target, position_tol=0.5, orientation_tol=0.5, timeout=30.0)
         
         if success:
             print(f"Reached Target {i+1}. Switch to GUI and press SPACE now.")

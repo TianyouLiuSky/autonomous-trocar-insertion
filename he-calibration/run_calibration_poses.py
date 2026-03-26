@@ -1,5 +1,5 @@
 import numpy as np
-from SHERController import SHERController
+from SHER_Controller import SHERController
 import time
 
 def generate_diverse_poses(base_pose):
@@ -64,7 +64,7 @@ if __name__ == "__main__":
             print(f"Reached Target {i+1}. Switch to GUI and press SPACE now.")
             # We give you 3 seconds to press Space in the other window
             # Alternatively, you can increase this sleep time
-            time.sleep(3) 
+            time.sleep(10) 
         else:
             print(f"Failed to reach Target {i+1}, skipping...")
 

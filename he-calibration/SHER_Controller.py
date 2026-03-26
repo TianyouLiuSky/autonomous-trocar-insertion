@@ -7,7 +7,6 @@ import time
 # use this to follow the numeric precision on eyerobot GUI
 np.set_printoptions(suppress=True, precision=4)
 
-
 class SHERController:
     """Simple controller for SHER robot with and without RCM constraint"""
 
@@ -285,18 +284,18 @@ class SHERController:
 
 # Example usage
 if __name__ == "__main__":
-    controller = SHERController(robot_name='SHER21')
+    controller = SHERController(robot_name='SHER20')
 
     # Example 1: No RCM motion
     print("=" * 50)
     print("Example 1: No RCM motion")
     print("=" * 50)
     target = controller.get_current_pose()
-    target[0] = -48.695
-    target[1] = -35.437
-    target[2] = -32.886
-    target[3] = -12.4913
-    target[4] = 48.157
+    target[0] = -2.635
+    target[1] = -129.700
+    target[2] = 31.560
+    target[3] = -9.8928
+    target[4] = 1.6030
     target[5] = 0
     success = controller.no_rcm_move_to(target)
     if success:

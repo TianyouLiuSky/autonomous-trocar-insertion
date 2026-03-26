@@ -66,14 +66,14 @@ if __name__ == "__main__":
     start_pose = robot.get_current_pose()
     targets = generate_diverse_poses(start_pose)
     
-    print(f"Starting auto-calibration sequence for 20 poses...")
+    print(f"Starting auto-calibration sequence for 25 poses...")
     print("MAKE SURE THE CALIBRATION GUI IS RUNNING AND VISIBLE!")
 
     for i, target in enumerate(targets):
-        print(f"\nMoving to Pose {i+1}/20: {target}")
+        print(f"\nMoving to Pose {i+1}/25: {target}")
         
         # Move robot (No RCM for calibration)
-        success = robot.no_rcm_move_to(target, timeout=10.0)
+        success = robot.no_rcm_move_to(target, timeout=30.0)
         
         if success:
             print(f"Reached Target {i+1}. Switch to GUI and press SPACE now.")

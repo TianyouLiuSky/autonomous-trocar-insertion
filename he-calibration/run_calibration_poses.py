@@ -11,35 +11,39 @@ def generate_diverse_poses(base_pose):
     # Current pose is [x, y, z, roll, pitch, yaw]
     x, y, z, r, p, y_yaw = base_pose
     
-    # 20 offsets to create a 'cloud' of points with different tilts
+    # 25 offsets to create a 'cloud' of points with different tilts
     offsets = [
-        [0, 0, 0, 0, 0, 0],           # 1: Center
-        [10, 5, 5, 10, 0, 0],         # 2: Roll +10
-        [-10, -5, 10, -10, 0, 0],     # 3: Roll -10
-        [5, 15, -5, 0, 10, 0],        # 4: Pitch +10
-        [-5, -15, 0, 0, -10, 0],      # 5: Pitch -10
-        [15, 0, 10, 15, 15, 0],       # 6: Quadrant 1
-        [-15, 10, -10, -15, -15, 0],  # 7: Quadrant 3
-        [0, -10, 15, 15, -15, 0],     # 8: Quadrant 4
-        [10, -15, -5, -15, 15, 0],    # 9: Quadrant 2
-        [-10, 5, 10, 20, 0, 0],       # 10: Extreme Roll +
-        [20, 0, 0, -20, 0, 0],        # 11: Extreme Roll -
-        [0, 20, 0, 0, 20, 0],         # 12: Extreme Pitch +
-        [-20, -20, 5, 0, -20, 0],     # 13: Extreme Pitch -
-        [5, 5, 20, 20, 10, 0],        # 14: Mid-grid
-        [-5, -5, -10, -20, 10, 0],    # 15: Mid-grid
-        [10, 20, 15, -20, -10, 0],    # 16: Mid-grid
-        [-15, -5, -5, 20, -10, 0],    # 17: Mid-grid
-        [10, -10, 10, 10, 20, 0],     # 18: Mid-grid
-        [-10, 15, -15, -10, 20, 0],   # 19: Mid-grid
-        [0, 0, 15, -10, -20, 0],      # 20: Mid-grid
+        [0,  0,  0,   6,   0,   0],
+        [0,  0,  0,  -6,   0,   0],
+        [0,  0,  0,   0,   6,   0],
+        [0,  0,  0,   0,  -6,   0],
 
-        # 5 NEW SUPPLEMENTARY POSES
-        [5, 5, 5, 10, 10, 0],         # 21: Missing 10, 10 diagonal
-        [-5, -5, -5, -10, -10, 0],    # 22: Missing -10, -10 diagonal
-        [5, -5, 5, 10, -10, 0],       # 23: Missing 10, -10 diagonal
-        [-5, 5, -5, -10, 10, 0],      # 24: Missing -10, 10 diagonal
-        [10, -5, 10, 10, -20, 0],     # 25: Completes the missing 10/-20 combo
+        [0,  0,  0,   8,   8,   0],
+        [0,  0,  0,  -8,   8,   0],
+        [0,  0,  0,   8,  -8,   0],
+        [0,  0,  0,  -8,  -8,   0],
+
+        [6,  0,  2,  10,   0,   0],
+        [-6, 0, -2, -10,   0,   0],
+        [0,  6,  2,   0,  10,   0],
+        [0, -6, -2,   0, -10,   0],
+
+        [6,  6,  3,   7,   7,   0],
+        [-6, 6, -3,  -7,   7,   0],
+        [6, -6,  3,   7,  -7,   0],
+        [-6,-6, -3,  -7,  -7,   0],
+
+        [8,  0,  5,  12,   6,   0],
+        [-8, 0, -5, -12,   6,   0],
+        [8,  0,  5,  12,  -6,   0],
+        [-8, 0, -5, -12,  -6,   0],
+
+        [0,  8,  5,   6,  12,   0],
+        [0,  8, -5,  -6,  12,   0],
+        [0, -8,  5,   6, -12,   0],
+        [0, -8, -5,  -6, -12,   0],
+
+        [0,  0,  8,   9,   9,   0],
     ]
     
     for offset in offsets:
@@ -58,11 +62,11 @@ if __name__ == "__main__":
     start_pose = robot.get_current_pose()
     targets = generate_diverse_poses(start_pose)
     
-    print(f"Starting auto-calibration sequence for 20 poses...")
+    print(f"Starting auto-calibration sequence for 25 poses...")
     print("MAKE SURE THE CALIBRATION GUI IS RUNNING AND VISIBLE!")
 
     for i, target in enumerate(targets):
-        print(f"\nMoving to Pose {i+1}/20: {target}")
+        print(f"\nMoving to Pose {i+1}/25: {target}")
         
         # Move robot (No RCM for calibration)
         success = robot.no_rcm_move_to(target, timeout=10.0)

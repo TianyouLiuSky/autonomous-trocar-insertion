@@ -11,39 +11,39 @@ def generate_diverse_poses(base_pose):
     # Current pose is [x, y, z, roll, pitch, yaw]
     x, y, z, r, p, y_yaw = base_pose
     
-    # 25 offsets to create a 'cloud' of points with different tilts
+    # 20 offsets to create a 'cloud' of points with different tilts
     offsets = [
         [0,  0,  0,   6,   0,   0],
         [0,  0,  0,  -6,   0,   0],
         [0,  0,  0,   0,   6,   0],
         [0,  0,  0,   0,  -6,   0],
 
-        [0,  0,  0,   8,   8,   0],
-        [0,  0,  0,  -8,   8,   0],
-        [0,  0,  0,   8,  -8,   0],
-        [0,  0,  0,  -8,  -8,   0],
+        [2,  0,  0,   6,   0,   0],
+        [-2, 0,  0,  -6,   0,   0],
+        [0,  2,  0,   0,   6,   0],
+        [0, -2,  0,   0,  -6,   0],
 
-        [6,  0,  2,  10,   0,   0],
-        [-6, 0, -2, -10,   0,   0],
-        [0,  6,  2,   0,  10,   0],
-        [0, -6, -2,   0, -10,   0],
+        [2,  2,  1,   6,   6,   0],
+        [-2, 2, -1,  -6,   6,   0],
+        [2, -2,  1,   6,  -6,   0],
+        [-2,-2, -1,  -6,  -6,   0],
 
-        [6,  6,  3,   7,   7,   0],
-        [-6, 6, -3,  -7,   7,   0],
-        [6, -6,  3,   7,  -7,   0],
-        [-6,-6, -3,  -7,  -7,   0],
+        [3,  0,  1,   7,   0,   0],
+        [-3, 0, -1,  -7,   0,   0],
+        [0,  3,  1,   0,   7,   0],
+        [0, -3, -1,   0,  -7,   0],
 
-        [8,  0,  5,  12,   6,   0],
-        [-8, 0, -5, -12,   6,   0],
-        [8,  0,  5,  12,  -6,   0],
-        [-8, 0, -5, -12,  -6,   0],
+        [3,  2,  0,   7,   6,   0],
+        [-3, 2,  0,  -7,   6,   0],
+        [3, -2,  0,   7,  -6,   0],
+        [-3,-2,  0,  -7,  -6,   0],
 
-        [0,  8,  5,   6,  12,   0],
-        [0,  8, -5,  -6,  12,   0],
-        [0, -8,  5,   6, -12,   0],
-        [0, -8, -5,  -6, -12,   0],
+        [0,  0,  2,   6,   6,   0],
+        [0,  0, -2,  -6,   6,   0],
+        [0,  0,  2,   6,  -6,   0],
+        [0,  0, -2,  -6,  -6,   0],
 
-        [0,  0,  8,   9,   9,   0],
+        [0,  0,  0,   8,  -5,   0],
     ]
     
     for offset in offsets:
@@ -62,11 +62,11 @@ if __name__ == "__main__":
     start_pose = robot.get_current_pose()
     targets = generate_diverse_poses(start_pose)
     
-    print(f"Starting auto-calibration sequence for 25 poses...")
+    print(f"Starting auto-calibration sequence for 20 poses...")
     print("MAKE SURE THE CALIBRATION GUI IS RUNNING AND VISIBLE!")
 
     for i, target in enumerate(targets):
-        print(f"\nMoving to Pose {i+1}/25: {target}")
+        print(f"\nMoving to Pose {i+1}/20: {target}")
         
         # Move robot (No RCM for calibration)
         success = robot.no_rcm_move_to(target, timeout=10.0)

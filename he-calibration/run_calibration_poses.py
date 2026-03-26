@@ -11,43 +11,34 @@ def generate_diverse_poses(base_pose):
     # Current pose is [x, y, z, roll, pitch, yaw]
     x, y, z, r, p, y_yaw = base_pose
     
-    # 20 offsets to create a 'cloud' of points with different tilts
+    # 25 offsets to create a 'cloud' of points with different tilts
     # Format: [X, Y, Z, Roll, Pitch, Yaw]
     offsets = [
-        # Sweeping Right (Pitch = -16)
-        [-8, -8,  3, -16, -16, 0],  # 1: Start bottom-left
-        [-4, -8,  2,  -8, -16, 0],  # 2
-        [ 0, -8,  2,   0, -16, 0],  # 3
-        [ 4, -8,  2,   8, -16, 0],  # 4
-        [ 8, -8,  3,  16, -16, 0],  # 5: Reach bottom-right
-        
-        # Move up a row, Sweeping Left (Pitch = -8)
-        [ 8, -4,  2,  16,  -8, 0],  # 6: Shift up slightly
-        [ 4, -4,  2,   8,  -8, 0],  # 7
-        [ 0, -4,  1,   0,  -8, 0],  # 8
-        [-4, -4,  2,  -8,  -8, 0],  # 9
-        [-8, -4,  2, -16,  -8, 0],  # 10: Reach mid-left
-        
-        # Move up a row, Sweeping Right (Pitch = 0)
-        [-8,  0,  2, -16,   0, 0],  # 11: Shift up slightly
-        [-4,  0,  1,  -8,   0, 0],  # 12
-        [ 0,  0,  0,   0,   0, 0],  # 13: Dead Center
-        [ 4,  0,  1,   8,   0, 0],  # 14
-        [ 8,  0,  2,  16,   0, 0],  # 15: Reach mid-right
-        
-        # Move up a row, Sweeping Left (Pitch = 8)
-        [ 8,  4,  2,  16,   8, 0],  # 16: Shift up slightly
-        [ 4,  4,  2,   8,   8, 0],  # 17
-        [ 0,  4,  1,   0,   8, 0],  # 18
-        [-4,  4,  2,  -8,   8, 0],  # 19
-        [-8,  4,  2, -16,   8, 0],  # 20: Reach top-left
-        
-        # Move up to final row, Sweeping Right (Pitch = 16)
-        [-8,  8,  3, -16,  16, 0],  # 21: Shift up slightly
-        [-4,  8,  2,  -8,  16, 0],  # 22
-        [ 0,  8,  2,   0,  16, 0],  # 23
-        [ 4,  8,  2,   8,  16, 0],  # 24
-        [ 8,  8,  3,  16,  16, 0],  # 25: End top-right
+        [0, 0, 0, -14, -14, 0],  # 1
+        [0, 0, 0,  -7, -14, 0],  # 2
+        [0, 0, 0,   0, -14, 0],  # 3
+        [0, 0, 0,   7, -14, 0],  # 4
+        [0, 0, 0,  14, -14, 0],  # 5
+        [0, 0, 0,  14,  -7, 0],  # 6
+        [0, 0, 0,   7,  -7, 0],  # 7
+        [0, 0, 0,   0,  -7, 0],  # 8
+        [0, 0, 0,  -7,  -7, 0],  # 9
+        [0, 0, 0, -14,  -7, 0],  # 10
+        [0, 0, 0, -14,   0, 0],  # 11
+        [0, 0, 0,  -7,   0, 0],  # 12
+        [0, 0, 0,   0,   0, 0],  # 13 (Home/Center)
+        [0, 0, 0,   7,   0, 0],  # 14
+        [0, 0, 0,  14,   0, 0],  # 15
+        [0, 0, 0,  14,   7, 0],  # 16
+        [0, 0, 0,   7,   7, 0],  # 17
+        [0, 0, 0,   0,   7, 0],  # 18
+        [0, 0, 0,  -7,   7, 0],  # 19
+        [0, 0, 0, -14,   7, 0],  # 20
+        [0, 0, 0, -14,  14, 0],  # 21
+        [0, 0, 0,  -7,  14, 0],  # 22
+        [0, 0, 0,   0,  14, 0],  # 23
+        [0, 0, 0,   7,  14, 0],  # 24
+        [0, 0, 0,  14,  14, 0],  # 25
     ]
     
     for offset in offsets:

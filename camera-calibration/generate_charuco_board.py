@@ -80,14 +80,14 @@ def imshow_fit(winname, img, max_w=1200, max_h=800):
     cv2.imshow(winname, img)
 
 def write_pdf_exact_mm(png_path: str, pdf_path: str, page_w_mm: float, page_h_mm: float):
-    """
-    Create a PDF with an explicit page size in mm and place the PNG
-    so it prints at exact physical size when printed at 100% / Actual Size.
-    """
-    c = pdf_canvas.Canvas(pdf_path, pagesize=(page_w_mm * mm, page_h_mm * mm))
-    c.drawImage(png_path, 0, 0, width=page_w_mm * mm, height=page_h_mm * mm, mask='auto')
-    c.showPage()
-    c.save()
+    from PIL import Image as PILImage
+    img = PILImage.open(png_path)
+    # Convert to RGB if grayscale (PDF needs RGB)
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    # DPI tells the PDF renderer the physical size
+    img.save(pdf_path, "PDF", resolution=DPI)
+    print(f"Saved PDF: {pdf_path}")
 
 # -----------------------------
 # Main

@@ -9,6 +9,7 @@ import json
 import numpy as np
 from collections import defaultdict
 import cv2
+from datetime import datetime
 print(cv2.__version__)
 print("Has CharucoDetector:", hasattr(cv2.aruco, "CharucoDetector"))
 print("Has calibrateCameraCharuco:", hasattr(cv2.aruco, "calibrateCameraCharuco"))
@@ -16,13 +17,19 @@ print("Has calibrateCameraCharuco:", hasattr(cv2.aruco, "calibrateCameraCharuco"
 # -----------------------------
 # USER CONFIG
 # -----------------------------
-IMAGE_DIR = "./data/21Feb2026/"
+# IMAGE_DIR = "./data/21Feb2026/" # First cal
+IMAGE_DIR = "./data/30Mar2026/" # Second cal 
 IMAGE_EXTS = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff")
 
 # ChArUco board definition (MUST match what you printed)
-SQUARES_X = 13
-SQUARES_Y = 13
-SQUARE_MM = 3.0
+# SQUARES_X = 13
+# SQUARES_Y = 13
+# SQUARE_MM = 3.0
+# MARKER_RATIO = 0.70
+# MARKER_MM = SQUARE_MM * MARKER_RATIO
+SQUARES_X = 10
+SQUARES_Y = 10
+SQUARE_MM = 4.0
 MARKER_RATIO = 0.70
 MARKER_MM = SQUARE_MM * MARKER_RATIO
 
@@ -169,22 +176,25 @@ for cam_id, paths in by_cam.items():
         print("  [ERROR] Not enough valid frames to calibrate. Get more images or improve detection.")
         continue
 
+    # Build matched object/image point lists for cv2.calibrateCamera
+    obj_points = []
+    img_points = []
+    for corners, ids in zip(all_charuco_corners, all_charuco_ids):
+        obj_pts, img_pts = board.matchImagePoints(corners, ids)
+        if obj_pts is not None and len(obj_pts) >= 4:
+            obj_points.append(obj_pts)
+            img_points.append(img_pts)
+
     flags = 0
-    rms, K, dist, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(
-        charucoCorners=all_charuco_corners,
-        charucoIds=all_charuco_ids,
-        board=board,
-        imageSize=image_size,
-        cameraMatrix=None,
-        distCoeffs=None,
-        flags=flags
+    rms, K, dist, rvecs, tvecs = cv2.calibrateCamera(
+        obj_points, img_points, image_size, None, None, flags=flags
     )
 
     print(f"RMS reprojection error: {rms:.6f} px")
     print("K =\n", K)
     print("dist =", dist.reshape(-1))
 
-    npz_path = os.path.join(OUT_DIR, f"calibration_{cam_id}.npz")
+    npz_path = os.path.join(OUT_DIR, f"calibration_{cam_id}_{datetime.now().strftime('%d%b%Y').upper()}.npz")
     np.savez(
         npz_path,
         cam_id=cam_id,
@@ -202,7 +212,7 @@ for cam_id, paths in by_cam.items():
     )
     print(f"Saved: {npz_path}")
 
-    json_path = os.path.join(OUT_DIR, f"calibration_{cam_id}.json")
+    json_path = os.path.join(OUT_DIR, f"calibration_{cam_id}_{datetime.now().strftime('%d%b%Y').upper()}.json") 
     payload = {
         "cam_id": cam_id,
         "image_size": {"width": int(image_size[0]), "height": int(image_size[1])},

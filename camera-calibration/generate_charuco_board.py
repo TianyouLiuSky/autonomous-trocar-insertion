@@ -7,13 +7,13 @@ from reportlab.pdfgen import canvas as pdf_canvas
 from reportlab.lib.units import mm
 from PIL import Image  # noqa: F401 (used implicitly by reportlab sometimes)
 
-# Params
+# Old Params (10cm x 10xm too big for our test setup)
 # For a 10x10
-BOARD_MM = 40.0
-SQUARE_MM = 4.0
-MARKER_RATIO = 0.70
-DPI = 600
-MARGIN_MM = 3.0
+# BOARD_MM = 40.0
+# SQUARE_MM = 4.0
+# MARKER_RATIO = 0.70
+# DPI = 600
+# MARGIN_MM = 3.0
 
 # For a 13x13
 # BOARD_MM = 40.0
@@ -29,9 +29,28 @@ MARGIN_MM = 3.0
 # DPI = 600
 # MARGIN_MM = 2.0
 
+# New Params
+# Config A — 24mm board
+BOARD_MM = 24.0
+SQUARE_MM = 4.0
+MARKER_RATIO = 0.70
+MARGIN_MM = 2.0
 
-OUT_PNG = "./vision_targets/charuco_40mm_3.png"
-OUT_PDF = "./vision_targets/charuco_40mm_3.pdf"
+# Config B — 20mm board
+# BOARD_MM = 20.0
+# SQUARE_MM = 4.0
+# MARKER_RATIO = 0.70
+# MARGIN_MM = 2.0
+
+# Config C — 21mm board  
+# BOARD_MM = 21.0
+# SQUARE_MM = 3.5
+# MARKER_RATIO = 0.70
+# MARGIN_MM = 2.0
+DPI = 600
+
+OUT_PNG = "./vision_targets/charuco_24mm.png"
+OUT_PDF = "./vision_targets/charuco_24mm.pdf"
 
 # Pick dictionary candidates (auto-selects one large enough)
 DICT_CANDIDATES = [

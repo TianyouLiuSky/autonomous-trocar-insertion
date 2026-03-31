@@ -5,9 +5,9 @@ import numpy as np
 from collections import defaultdict
 import cv2
 
-VALIDATION_DIR = "./validation/21Feb2026/"
+VALIDATION_DIR = "./validation/31Mar2026/"
 INTRINSICS_DIR = "./output/"
-REPORT_PATH = "./output/validation_report_21Feb2026.txt"  # Change later
+REPORT_PATH = "./output/validation_report_31Mar2026.txt"  # Change later
 
 # -----------------------------
 # Parsing intrinsics (your JSON format)
@@ -189,29 +189,28 @@ def validate_camera_reprojection(cam_id, cam_data, image_paths):
             per_frame.append({"image": os.path.basename(p), "status": "read_fail"})
             continue
 
-        # Detect markers
-        corners, ids, _ = detector.detectMarkers(img)
+        # Detect ChArUco corners directly (OpenCV 4.8+ API)
+        charuco_detector = cv2.aruco.CharucoDetector(board)
+        charuco_corners, charuco_ids, corners, ids = charuco_detector.detectBoard(img)
+
         if ids is None or len(ids) < 4:
             per_frame.append({"image": os.path.basename(p), "status": "no_markers", "n_charuco": 0})
             continue
 
-        # Interpolate ChArUco corners
-        retval, charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
-            corners, ids, img, board
-        )
-
-        if retval is None or retval < 6:
+        if charuco_ids is None or len(charuco_ids) < 6:
             per_frame.append(
-                {"image": os.path.basename(p), "status": "too_few_charuco", "n_charuco": int(retval) if retval else 0}
+                {"image": os.path.basename(p), "status": "too_few_charuco", "n_charuco": int(len(charuco_ids)) if charuco_ids is not None else 0}
             )
             continue
 
-        # Pose estimate
-        ok, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
-            charuco_corners, charuco_ids, board, K, dist, None, None
-        )
+        # Pose estimate (OpenCV 4.8+ API)
+        obj_pts, img_pts_matched = board.matchImagePoints(charuco_corners, charuco_ids)
+        if obj_pts is None or len(obj_pts) < 4:
+            per_frame.append({"image": os.path.basename(p), "status": "pose_fail", "n_charuco": len(charuco_ids)})
+            continue
+        ok, rvec, tvec = cv2.solvePnP(obj_pts, img_pts_matched, K, dist)
         if not ok:
-            per_frame.append({"image": os.path.basename(p), "status": "pose_fail", "n_charuco": int(retval)})
+            per_frame.append({"image": os.path.basename(p), "status": "pose_fail", "n_charuco": len(charuco_ids)})
             continue
 
         # 3D object points for detected ChArUco corners

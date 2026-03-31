@@ -1,0 +1,67 @@
+Camera Calibration Hold-out Validation Report
+================================================
+
+Camera: 24213548
+  Intrinsics file: ./output/calibration_24213548_31MAR2026.json
+  Training RMS (px): 1.0033710790575565
+  Images validated: 16 (OK: 16)
+  Pixel reprojection error |e| (px):
+    mean   = 1.2037
+    median = 0.9897
+    p95    = 2.8735
+    max    = 4.5013
+  Angular error (small-angle) (rad):
+    theta_x: mean=1.438427e-05, p95=3.731726e-05  (~0.037 mrad p95)
+    theta_y: mean=2.034673e-05, p95=5.860304e-05  (~0.059 mrad p95)
+  Per-frame summary (only OK frames shown):
+    24213548_20260331120918.bmp: N=25, mean=1.224px, p95=3.003px, max=3.067px
+    24213548_20260331120921.bmp: N=25, mean=1.083px, p95=2.390px, max=3.387px
+    24213548_20260331120926.bmp: N=25, mean=1.105px, p95=2.250px, max=2.865px
+    24213548_20260331120927.bmp: N=25, mean=2.101px, p95=3.945px, max=4.501px
+    24213548_20260331120929.bmp: N=21, mean=1.256px, p95=2.182px, max=2.747px
+    24213548_20260331120933.bmp: N=24, mean=1.240px, p95=2.616px, max=3.122px
+    24213548_20260331120935.bmp: N=24, mean=0.995px, p95=2.307px, max=3.648px
+    24213548_20260331120936.bmp: N=25, mean=1.197px, p95=2.399px, max=3.230px
+    24213548_20260331120939.bmp: N=25, mean=1.098px, p95=2.373px, max=3.322px
+    24213548_20260331120941.bmp: N=25, mean=1.287px, p95=2.829px, max=3.086px
+    24213548_20260331120942.bmp: N=25, mean=0.989px, p95=2.296px, max=4.084px
+    24213548_20260331120944.bmp: N=25, mean=1.160px, p95=2.416px, max=3.794px
+    24213548_20260331120945.bmp: N=25, mean=1.081px, p95=2.616px, max=3.130px
+    24213548_20260331120948.bmp: N=25, mean=1.349px, p95=3.170px, max=3.319px
+    24213548_20260331120949.bmp: N=25, mean=1.105px, p95=2.087px, max=3.352px
+    24213548_20260331120950.bmp: N=25, mean=0.993px, p95=2.292px, max=3.966px
+
+Camera: 25332589
+  Intrinsics file: ./output/calibration_25332589_31MAR2026.json
+  Training RMS (px): 1.6937011869552494
+  Images validated: 21 (OK: 21)
+  Pixel reprojection error |e| (px):
+    mean   = 1.4752
+    median = 1.2433
+    p95    = 3.4446
+    max    = 11.8923
+  Angular error (small-angle) (rad):
+    theta_x: mean=2.917474e-05, p95=8.159495e-05  (~0.082 mrad p95)
+    theta_y: mean=2.033534e-05, p95=5.981420e-05  (~0.060 mrad p95)
+  Per-frame summary (only OK frames shown):
+    25332589_20260331121007.bmp: N=25, mean=1.094px, p95=2.439px, max=2.753px
+    25332589_20260331121010.bmp: N=25, mean=1.220px, p95=2.329px, max=2.979px
+    25332589_20260331121011.bmp: N=25, mean=1.234px, p95=2.354px, max=2.932px
+    25332589_20260331121013.bmp: N=19, mean=1.201px, p95=2.828px, max=3.608px
+    25332589_20260331121015.bmp: N=12, mean=1.061px, p95=2.350px, max=2.514px
+    25332589_20260331121016.bmp: N=15, mean=1.411px, p95=2.398px, max=2.417px
+    25332589_20260331121018.bmp: N=20, mean=1.100px, p95=2.367px, max=2.392px
+    25332589_20260331121019.bmp: N=25, mean=1.129px, p95=2.449px, max=2.606px
+    25332589_20260331121021.bmp: N=25, mean=2.750px, p95=6.960px, max=11.892px
+    25332589_20260331121023.bmp: N=24, mean=1.402px, p95=2.674px, max=2.756px
+    25332589_20260331121024.bmp: N=24, mean=1.267px, p95=2.448px, max=2.652px
+    25332589_20260331121029.bmp: N=25, mean=1.736px, p95=3.605px, max=3.813px
+    25332589_20260331121032.bmp: N=24, mean=1.386px, p95=3.315px, max=3.496px
+    25332589_20260331121034.bmp: N=20, mean=1.290px, p95=1.980px, max=2.991px
+    25332589_20260331121039.bmp: N=25, mean=1.419px, p95=3.251px, max=3.666px
+    25332589_20260331121041.bmp: N=25, mean=1.181px, p95=2.991px, max=3.207px
+    25332589_20260331121042.bmp: N=20, mean=1.258px, p95=3.071px, max=3.148px
+    25332589_20260331121044.bmp: N=21, mean=2.664px, p95=4.461px, max=9.490px
+    25332589_20260331121045.bmp: N=17, mean=2.371px, p95=4.719px, max=5.073px
+    25332589_20260331121047.bmp: N=24, mean=1.581px, p95=3.145px, max=3.207px
+    25332589_20260331121049.bmp: N=20, mean=1.167px, p95=2.165px, max=2.266px

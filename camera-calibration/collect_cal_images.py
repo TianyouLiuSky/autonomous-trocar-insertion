@@ -35,7 +35,7 @@ TOPIC_RIGHT = "/camera_array/cam_right/image_raw"
 CAM_ID_LEFT  = "24213548"
 CAM_ID_RIGHT = "25332589"
 
-OUT_DIR = "./single_camera_calibration/data/30Mar2026" # For intrinsic cal  
+OUT_DIR = "./single_camera_calibration/data/31Mar2026_2" # For intrinsic cal  
 # OUT_DIR = "./stereo_calibration/data/30Mar2026"  # For stereo cal (both cams at once)
 
 

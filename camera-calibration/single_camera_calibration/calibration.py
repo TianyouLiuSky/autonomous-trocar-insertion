@@ -18,7 +18,7 @@ print("Has calibrateCameraCharuco:", hasattr(cv2.aruco, "calibrateCameraCharuco"
 # USER CONFIG
 # -----------------------------
 # IMAGE_DIR = "./data/21Feb2026/" # First cal
-IMAGE_DIR = "./data/30Mar2026/" # Second cal 
+IMAGE_DIR = "./data/31Mar2026_2/" # Second cal 
 IMAGE_EXTS = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff")
 
 # ChArUco board definition (MUST match what you printed)
@@ -27,9 +27,24 @@ IMAGE_EXTS = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff")
 # SQUARE_MM = 3.0
 # MARKER_RATIO = 0.70
 # MARKER_MM = SQUARE_MM * MARKER_RATIO
-SQUARES_X = 10
-SQUARES_Y = 10
-SQUARE_MM = 4.0
+
+# SQUARES_X = 10
+# SQUARES_Y = 10
+# SQUARE_MM = 4.0
+# MARKER_RATIO = 0.70
+# MARKER_MM = SQUARE_MM * MARKER_RATIO
+
+# BOARD_MM = 24.0
+# SQUARE_MM = 4.0
+# MARKER_RATIO = 0.70
+# SQUARES_X = 6
+# SQUARES_Y = 6
+# MARKER_MM = SQUARE_MM * MARKER_RATIO
+
+BOARD_MM = 21.0
+SQUARE_MM = 3.5
+SQUARES_X = 6
+SQUARES_Y = 6
 MARKER_RATIO = 0.70
 MARKER_MM = SQUARE_MM * MARKER_RATIO
 

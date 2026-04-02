@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 import cv2
 import argparse
+from datetime import datetime
 
 def evaluate_and_plot(calib_npz_path, validation_npz_path):
     # 1. Load the Calibration Matrices you want to test
@@ -110,6 +111,13 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
     fig.colorbar(sc2, ax=ax2, label='Error (mm)', shrink=0.7)
 
     plt.tight_layout()
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
+    save_filename = f'spatial_error_map_{timestamp}.png'
+    
+    plt.savefig(save_filename, dpi=300, bbox_inches='tight')
+    print(f"\n✓ Saved high-resolution plot to: {save_filename}")
+
     plt.show()
 
 if __name__ == "__main__":

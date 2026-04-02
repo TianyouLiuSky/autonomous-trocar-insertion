@@ -1,6 +1,5 @@
 import numpy as np
 from SHER_Controller import SHERController
-import time
 
 def generate_validation_poses(base_pose):
     """
@@ -41,19 +40,23 @@ if __name__ == "__main__":
     start_pose = robot.get_current_pose()
     targets = generate_validation_poses(start_pose)
     
+    print(f"\n{'='*50}")
     print(f"Starting validation sequence for 27 poses...")
-    print("MAKE SURE THE GUI IS RUNNING (CHANGE N_SAMPLES TO 27 IN GUI!)")
+    print("MAKE SURE THE DATA COLLECTOR SCRIPT IS RUNNING!")
+    print(f"{'='*50}\n")
 
     for i, target in enumerate(targets):
         print(f"\nMoving to Pose {i+1}/27: {target}")
         
-        # Relaxed tolerances to prevent timeout failures
-        success = robot.no_rcm_move_to(target, position_tol=0.5, orientation_tol=0.5, timeout=15.0)
+        # Let the robot try to reach the target for up to 15 seconds.
+        # It doesn't matter if it returns True or False, it will be physically in a new position.
+        robot.no_rcm_move_to(target, position_tol=0.5, orientation_tol=0.5, timeout=15.0)
         
-        if success:
-            print(f"Reached Target {i+1}. Switch to GUI and press SPACE now.")
-            time.sleep(10) 
-        else:
-            print(f"Failed to reach Target {i+1}, skipping...")
+        # Robot has settled (either by reaching tolerance or timing out during micro-adjustments)
+        print(f"\n>>> Robot has settled at Pose {i+1}.")
+        print(">>> Switch to the Camera window and press SPACE to record.")
+        
+        # Block execution until the user explicitly says they captured it
+        input(">>> Press ENTER in this terminal once you have captured the data to move to the next point...")
 
-    print("\nSequence complete. Save the data in the GUI.")
+    print("\nSequence complete. The data collector should automatically save the dataset!")

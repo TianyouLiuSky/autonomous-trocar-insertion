@@ -83,7 +83,7 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
     ax1 = fig.add_subplot(121, projection='3d')
     sc1 = ax1.scatter(coords[:,0], coords[:,1], coords[:,2], c=r_mags, cmap='viridis', s=10)
     ax1.quiver(coords[:,0], coords[:,1], coords[:,2], r_err_vecs[:,0], r_err_vecs[:,1], r_err_vecs[:,2], 
-               length=1.5, color='midnightblue', alpha=0.6)
+               length=1.0, color='midnightblue', alpha=0.6)
     
     ax1.scatter(coords[0,0], coords[0,1], coords[0,2], c='red', marker='*', s=100, label='Start Point')
     ax1.scatter(coords[max_r_idx,0], coords[max_r_idx,1], coords[max_r_idx,2], c='yellow', marker='*', s=150, edgecolors='black', label='Max Error Point')
@@ -99,7 +99,7 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
     sc2 = ax2.scatter(coords[:,0], coords[:,1], coords[:,2], c=t_mags, cmap='viridis', s=10)
     
     ax2.quiver(coords[:,0], coords[:,1], coords[:,2], t_err_vecs[:,0], t_err_vecs[:,1], t_err_vecs[:,2], 
-               length=10.0, color='midnightblue', alpha=0.6) 
+               length=1.0, color='midnightblue', alpha=0.6) 
     
     ax2.scatter(coords[0,0], coords[0,1], coords[0,2], c='red', marker='*', s=100, label='Start Point')
     ax2.scatter(coords[max_t_idx,0], coords[max_t_idx,1], coords[max_t_idx,2], c='yellow', marker='*', s=150, edgecolors='black', label='Max Error Point')

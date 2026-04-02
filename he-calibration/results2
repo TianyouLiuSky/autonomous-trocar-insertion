@@ -331,3 +331,15 @@ Sample 3:
 
 
 ✓ Saved to: hand_eye_calibration.npz
+
+
+Validation:
+python3 evaluate_calibration.py 
+Loaded Calibration: hand_eye_calibration.npz
+Loaded 27 Ground Truth samples from: validation_dataset.npz
+
+--- EVALUATION RESULTS ---
+Mean Translation Error: 4.737 mm (Max: 8.687 mm)
+Mean Rotation Error:    0.750 deg (Max: 1.008 deg)
+
+✓ Saved high-resolution plot to: spatial_error_map_20260402_103437.png

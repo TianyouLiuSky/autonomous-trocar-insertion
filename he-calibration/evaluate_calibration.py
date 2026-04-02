@@ -114,5 +114,5 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
 
 if __name__ == "__main__":
     # You can change these filenames to test different calibrations against the same dataset
-    plot_spatial_error_maps(calib_npz_path='hand_eye_calibration.npz', 
+    evaluate_and_plot(calib_npz_path='hand_eye_calibration.npz', 
                             validation_npz_path='validation_dataset.npz')

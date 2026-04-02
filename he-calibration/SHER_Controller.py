@@ -133,7 +133,7 @@ class SHERController:
             linear_vel = pos_error * self.linear_gain
             linear_vel_norm = np.linalg.norm(linear_vel)
             if linear_vel_norm > max_linear_vel:
-                print("Warning, reach linear limit")
+                # print("Warning, reach linear limit")
                 linear_vel = (linear_vel / linear_vel_norm) * max_linear_vel
 
             # Angular velocity: proportional to rotation error
@@ -258,7 +258,7 @@ class SHERController:
             linear_vel = pos_error * self.linear_gain
             linear_vel_norm = np.linalg.norm(linear_vel)
             if linear_vel_norm > max_linear_vel:
-                print("Warning, reach linear limit")
+                # print("Warning, reach linear limit")
                 linear_vel = (linear_vel / linear_vel_norm) * max_linear_vel
 
             # Angular velocity: proportional to rotation error

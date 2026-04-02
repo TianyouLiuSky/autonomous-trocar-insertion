@@ -48,8 +48,8 @@ DEFAULT_SPECKLE_W = 100
 DEFAULT_SPECKLE_R = 2
 
 # Depth colormap range (mm)
-DEPTH_MIN_MM = 500
-DEPTH_MAX_MM = 502
+DEPTH_MIN_MM = 100
+DEPTH_MAX_MM = 2000
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Style
@@ -412,6 +412,15 @@ class StereoDepthViewer(QMainWindow):
 
         disp = sgbm.compute(rect_l, rect_r).astype(np.float32) / 16.0
         disp[disp <= 0] = 0
+        
+        valid = disp[disp > 0]
+        if valid.size > 0:
+            print(f"[disp] unique vals: {np.unique(valid.round()).shape[0]}  "
+                f"range: {valid.min():.1f} – {valid.max():.1f} px  "
+                f"implied Z: {self._f_rect * self._baseline_mm / valid.max():.0f} – "
+                f"{self._f_rect * self._baseline_mm / valid.min():.0f} mm")
+        else:
+            print("[disp] no valid disparity")
 
         # ── depth ─────────────────────────────────────────────────────────────
         with np.errstate(divide="ignore", invalid="ignore"):

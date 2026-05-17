@@ -1,0 +1,1 @@
+dimple + diverse poses around dimple + get FK + get tracker pose = clibration

@@ -137,7 +137,7 @@ Rotation:
 
 
 ✓ Saved to: hand_eye_calibration.npz
-tianle@u113414:~/Autonomous-Trocar-Insertion/he-calibration$ python3 d405_handeye.py 
+tianle@u113414:~/Autonomous-Trocar-Insertion/hand-eye-calibration$ python3 d405_handeye.py 
 Waiting for camera info...
 Camera ready: K=
 [[430.64361572   0.         414.63943481]

@@ -21,7 +21,7 @@ ROLL_DEG  = 10.0
 PITCH_DEG = 10.0
 TIMEOUT   = 30.0
 
-OUTPUT_DIR = os.path.expanduser("~/Autonomous-Trocar-Insertion/he-calibration/data")
+OUTPUT_DIR = os.path.expanduser("~/Autonomous-Trocar-Insertion/hand-eye-calibration/data")
 
 CORNERS = np.array([
     [0,      0,      0     ],

@@ -1,0 +1,6 @@
+1 neutral
+2 roll_pos_large
+3 roll_neg_large
+4 pitch_pos_large
+5 pitch_neg_large
+6 roll_pos_pitch_pos

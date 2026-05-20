@@ -1,0 +1,25 @@
+{
+  "condition_number": 1.3838114469078394e+17,
+  "created": "19MAY2026_140049",
+  "csv_samples": "/home/tianle/autonomous-trocar-insertion/pivot-calibration/output/manual_pivot_calibration_19MAY2026_140049_samples.csv",
+  "max_pairwise_rotation_deg": 0.0,
+  "max_residual_mm": 8.85331686673191e-14,
+  "mean_residual_mm": 8.85331686673191e-14,
+  "method": "robot_fk_pivot_calibration",
+  "min_pairwise_rotation_deg": 0.0,
+  "npz": "/home/tianle/autonomous-trocar-insertion/pivot-calibration/output/manual_pivot_calibration_19MAY2026_140049.npz",
+  "pivot_base_mm": [
+    34.470346993910084,
+    -65.48264324257214,
+    4.5344643575890515
+  ],
+  "rank": 3,
+  "rms_residual_mm": 8.85331686673191e-14,
+  "sample_count": 6,
+  "t_gripper_tip_mm": [
+    -28.367004096499084,
+    51.79968139661859,
+    -44.82018340795584
+  ],
+  "units": "millimeters"
+}

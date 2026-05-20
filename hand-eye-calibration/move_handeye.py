@@ -12,7 +12,15 @@ Total: 17 poses. Waits for Enter at each pose.
 import numpy as np
 import csv
 import os
+import sys
 from datetime import datetime
+
+from pathlib import Path
+
+MOTION_SCRIPT_DIR = Path(__file__).resolve().parents[1] / "motion_script"
+if str(MOTION_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(MOTION_SCRIPT_DIR))
+
 from SHER_Controller import SHERController
 
 # ── config ──────────────────────────────────────────────────────────────────

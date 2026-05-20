@@ -2,7 +2,5 @@ dimple + diverse poses around dimple + get FK poses = calibration
 
 Implemented here:
 - pivot_calibration.py: collect FrameEE poses, solve t_gripper_tip and pivot point
-- manual_pivot_calibration.py: guided manual data collection while operator moves tool
 - pivot_pose_prompts.py: print manual orientation prompts for diverse sampling
 - README.md: workflow, math, outputs, and quality checks
-- README_manual.md: manual-only workflow instructions

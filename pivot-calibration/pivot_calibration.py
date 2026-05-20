@@ -40,7 +40,8 @@ except ImportError:
     Transform = None
 
 
-DEFAULT_ROBOT_NAME = "SHER20"
+ROBOT_NAME = "SHER20"
+ROBOT_TOPIC = "/SHER20/eye_robot/FrameEE"
 DEFAULT_MIN_SAMPLES = 12
 
 
@@ -51,10 +52,6 @@ def _timestamp():
 def _default_output_dir():
     here = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(here, "output")
-
-
-def _topic_for_robot(robot_name):
-    return "/{}/eye_robot/FrameEE".format(robot_name)
 
 
 def quat_to_rotmat(q):
@@ -283,12 +280,13 @@ def load_sample_csv(path):
 
 
 def save_solution(samples, result, output_dir, prefix="pivot_calibration"):
-    os.makedirs(output_dir, exist_ok=True)
     ts = _timestamp()
     base = "{}_{}".format(prefix, ts)
-    csv_path = os.path.join(output_dir, base + "_samples.csv")
-    json_path = os.path.join(output_dir, base + ".json")
-    npz_path = os.path.join(output_dir, base + ".npz")
+    run_dir = os.path.join(output_dir, base)
+    os.makedirs(run_dir, exist_ok=True)
+    csv_path = os.path.join(run_dir, base + "_samples.csv")
+    json_path = os.path.join(run_dir, base + ".json")
+    npz_path = os.path.join(run_dir, base + ".npz")
 
     positions = np.array([s["t_mm"] for s in samples], dtype=float)
     quaternions = np.array([s["q"] for s in samples], dtype=float)
@@ -331,13 +329,14 @@ def save_solution(samples, result, output_dir, prefix="pivot_calibration"):
         "condition_number": result["condition_number"],
         "min_pairwise_rotation_deg": result["min_pairwise_rotation_deg"],
         "max_pairwise_rotation_deg": result["max_pairwise_rotation_deg"],
+        "run_dir": run_dir,
         "csv_samples": csv_path,
         "npz": npz_path,
     }
     with open(json_path, "w") as f:
         json.dump(payload, f, indent=2, sort_keys=True)
 
-    return {"csv": csv_path, "json": json_path, "npz": npz_path}
+    return {"run_dir": run_dir, "csv": csv_path, "json": json_path, "npz": npz_path}
 
 
 def print_result(result, sample_count, residual_warn_mm):
@@ -393,12 +392,12 @@ def live_collect(args):
         print("ERROR: rospy is not installed in this environment. Use --from-csv offline.", file=sys.stderr)
         return 2
 
-    topic = args.topic or _topic_for_robot(args.robot_name)
     rospy.init_node("ati_pivot_calibration", anonymous=True)
-    listener = RobotPoseListener(topic, translation_scale_to_mm=args.translation_scale_to_mm)
+    listener = RobotPoseListener(ROBOT_TOPIC, translation_scale_to_mm=args.translation_scale_to_mm)
 
     print("\nATI pivot calibration")
-    print("Robot topic: {}".format(topic))
+    print("Robot: {} (SHER 2.0)".format(ROBOT_NAME))
+    print("Robot topic: {}".format(ROBOT_TOPIC))
     print("Translation scale to mm: {}".format(args.translation_scale_to_mm))
     print("\nSetup:")
     print("  1. Attach the trocar/tool exactly as it will be used.")
@@ -443,6 +442,7 @@ def live_collect(args):
             if last_result is not None:
                 paths = save_solution(samples, last_result, args.output_dir)
                 print("Saved:")
+                print("  Run: {}".format(paths["run_dir"]))
                 print("  NPZ : {}".format(paths["npz"]))
                 print("  JSON: {}".format(paths["json"]))
                 print("  CSV : {}".format(paths["csv"]))
@@ -466,6 +466,7 @@ def live_collect(args):
         if result is not None:
             paths = save_solution(samples, result, args.output_dir)
             print("Saved on exit:")
+            print("  Run: {}".format(paths["run_dir"]))
             print("  NPZ : {}".format(paths["npz"]))
             print("  JSON: {}".format(paths["json"]))
             print("  CSV : {}".format(paths["csv"]))
@@ -481,6 +482,7 @@ def offline_solve(args):
         return 0
     paths = save_solution(samples, result, args.output_dir)
     print("Saved:")
+    print("  Run: {}".format(paths["run_dir"]))
     print("  NPZ : {}".format(paths["npz"]))
     print("  JSON: {}".format(paths["json"]))
     print("  CSV : {}".format(paths["csv"]))
@@ -489,10 +491,6 @@ def offline_solve(args):
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(description="Collect and solve ATI trocar pivot calibration.")
-    parser.add_argument("--robot-name", default=DEFAULT_ROBOT_NAME,
-                        help="Robot name used to build the default FrameEE topic.")
-    parser.add_argument("--topic", default=None,
-                        help="Override robot end-effector Transform topic.")
     parser.add_argument("--translation-scale-to-mm", type=float, default=1.0,
                         help="Scale Transform translations into mm. Use 1000 if the topic is in meters.")
     parser.add_argument("--min-samples", type=int, default=DEFAULT_MIN_SAMPLES,

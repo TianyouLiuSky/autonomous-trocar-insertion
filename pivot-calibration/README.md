@@ -43,14 +43,28 @@ Prerequisites:
 
 - The actual trocar/tool is mounted exactly as it will be used.
 - The physical tip is seated in a stable dimple.
-- ROS is publishing the SHER end-effector transform, usually
+- ROS is publishing the SHER 2.0 end-effector transform:
   `/SHER20/eye_robot/FrameEE`.
 
-Run:
+Start ROS first. From the machine running the robot stack, use separate terminal
+windows:
+
+Terminal 1:
 
 ```bash
-cd Autonomous-Trocar-Insertion/pivot-calibration
-python3 pivot_calibration.py --robot-name SHER20
+roscore
+```
+
+Terminal 2:
+
+```bash
+roslaunch center_multimaster.launch
+```
+
+Then run pivot calibration from the `Autonomous-Trocar-Insertion` directory:
+
+```bash
+python3 pivot-calibration/pivot_calibration.py
 ```
 
 Controls:
@@ -73,26 +87,18 @@ Recommended sampling:
 You can print a manual pose prompt list with:
 
 ```bash
-python3 pivot_pose_prompts.py
+python3 pivot-calibration/pivot_pose_prompts.py
 ```
 
 This prompt script does not move the robot. That is intentional: before the
 TCP is known, commanding end-effector rotations can sweep the trocar tip.
-
-For a more guided fully manual workflow, use:
-
-```bash
-python3 manual_pivot_calibration.py --robot-name SHER20
-```
-
-See `README_manual.md`.
 
 ## Offline Re-Solve
 
 Every save writes a sample CSV. Recompute from CSV with:
 
 ```bash
-python3 pivot_calibration.py --from-csv output/pivot_calibration_<timestamp>_samples.csv
+python3 pivot-calibration/pivot_calibration.py --from-csv pivot-calibration/output/pivot_calibration_<timestamp>/pivot_calibration_<timestamp>_samples.csv
 ```
 
 ## Outputs
@@ -102,6 +108,9 @@ Each saved calibration writes:
 - `.npz`: machine-readable calibration and residual arrays
 - `.json`: human-readable summary
 - `_samples.csv`: raw recorded poses
+
+Each run is saved in its own timestamped folder under
+`pivot-calibration/output/`, while the timestamp is also kept in each filename.
 
 Key fields:
 

@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+
+# Generated calibration and validation artifacts
+*.npz
+validation_dataset.npz
+hand_eye_calibration.npz
+
+# Generated reports, plots, and run logs
+spatial_error_map_*.png
+results*
+
+# Runtime motion/capture outputs
+output/*.npz
+output/*.csv
+data/*.csv
+home_position/*.json

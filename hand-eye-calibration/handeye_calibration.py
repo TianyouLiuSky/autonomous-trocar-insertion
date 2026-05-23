@@ -243,7 +243,7 @@ class HandEyeCalibrator(object):
             'rob_tx_mm':     round(robot_pose['t_mm'][0], 4),
             'rob_ty_mm':     round(robot_pose['t_mm'][1], 4),
             'rob_tz_mm':     round(robot_pose['t_mm'][2], 4),
-            'rob_qx':        round(r                                        obot_pose['q'][0], 6),
+            'rob_qx':        round(robot_pose['q'][0], 6),
             'rob_qy':        round(robot_pose['q'][1], 6),
             'rob_qz':        round(robot_pose['q'][2], 6),
             'rob_qw':        round(robot_pose['q'][3], 6),

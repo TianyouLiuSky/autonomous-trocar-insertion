@@ -15,3 +15,4 @@ output/*.npz
 output/*.csv
 data/*.csv
 home_position/*.json
+motion_logs/*.csv

@@ -14,20 +14,20 @@ Run them in separate terminals and advance them together.
 
 ## Before Running
 
-Start the normal robot and camera ROS stack first.
+Start the normal robot stack first. The calibration GUI listens to the robot
+pose over ROS, but it opens the D405 directly through `pyrealsense2`, matching
+the working `d405_handeye.py` capture path.
 
 The calibration GUI expects:
 
 - Robot pose topic: `/SHER20/eye_robot/FrameEE`
-- D405 RGB topic: `/d405/color/image_raw`
-- D405 camera info topic: `/d405/color/camera_info`
+- Direct D405 color stream: `1280 x 720 @ 15 fps`
 
 Quick checks:
 
 ```bash
 rostopic echo -n 1 /SHER20/eye_robot/FrameEE
-rostopic echo -n 1 /d405/color/camera_info
-rostopic hz /d405/color/image_raw
+rs-enumerate-devices -c
 ```
 
 Make sure the ChArUco board matches the code:
@@ -82,6 +82,8 @@ The script then generates 20 poses:
 - Roll offsets: `[-12, -6, 0, 6, 12] deg`
 - Pitch offsets: `[-9, -3, 3, 9] deg`
 - Neighboring orientation difference: at least `6 deg`
+- Move timeout: `90 s`
+- Max angular velocity: `0.05 rad/s`
 
 At each pose, wait for the motion terminal to say the pose is ready. Then:
 
@@ -95,6 +97,17 @@ having fewer samples.
 
 After the last pose, the motion script returns the robot to the saved home
 position.
+
+The motion script also writes diagnostic CSV logs under:
+
+```text
+motion_logs/
+```
+
+Use `calibration_motion_samples_*.csv` to inspect the live position and
+orientation residual during each attempted move. This is useful if the robot
+appears to stop rotating before reaching a target. Use
+`calibration_motion_summary_*.csv` for one final residual row per attempt.
 
 ## Compute and Save
 
@@ -157,13 +170,14 @@ Generated files are ignored by `.gitignore`, including:
 - `hand_eye_calibration.npz`
 - `spatial_error_map_*.png`
 - `home_position/home_position.json`
+- `motion_logs/*.csv`
 - `__pycache__/`
 
 ## Troubleshooting
 
-If the GUI cannot see the camera, check that the ROS D405 topics are active. Do
-not run another process that directly owns the camera at the same time unless it
-is the ROS camera publisher that provides `/d405/color/image_raw`.
+If the GUI cannot see the camera, make sure no other process owns the D405 color
+stream. The GUI now opens the camera directly, so do not run the ROS D405 camera
+publisher or another direct RealSense script at the same time.
 
 If direct RealSense scripts fail with `Couldn't resolve requests`, the requested
 stream profile is not available. Check:
@@ -184,3 +198,14 @@ If calibration error is bad, first suspect bad sample pairing:
 
 For reliable runs, always let the motion script tell you when to record, and use
 the saved home position for validation.
+
+If the robot repeatedly fails on rotation while translation behaves normally,
+run the rotation-only limit test:
+
+```bash
+cd ~/Autonomous-Trocar-Insertion/motion_script
+python3 test_rotation_limits.py --robot-name SHER20 --max-offset-deg 35
+```
+
+This publishes angular velocity only, records when each roll/pitch sweep stops
+reaching the target, and writes logs under `motion_script/rotation_test_logs/`.

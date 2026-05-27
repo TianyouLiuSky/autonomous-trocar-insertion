@@ -11,10 +11,12 @@ if str(MOTION_SCRIPT_DIR) not in sys.path:
 from SHER_Controller import SHERController
 
 HOME_PATH = Path(__file__).resolve().parent / "home_position" / "home_position.json"
-MOVE_TIMEOUT_SEC = 45.0
+MOVE_TIMEOUT_SEC = 90.0
 POSITION_TOL_MM = 0.5
 ORIENTATION_TOL_DEG = 0.5
 MAX_MOVE_ATTEMPTS = 2
+MAX_LINEAR_VEL_MM_S = 5.0
+MAX_ANGULAR_VEL_RAD_S = 0.05
 SETTLE_SEC = 2.0
 
 
@@ -24,6 +26,12 @@ def pose_error(current_pose, target_pose):
     pos_err = np.linalg.norm(target_pose[:3] - current_pose[:3])
     ori_err = np.linalg.norm(target_pose[3:] - current_pose[3:])
     return pos_err, ori_err
+
+
+def normalize_command_pose(pose):
+    pose = np.asarray(pose, dtype=float).copy()
+    pose[5] = 0.0
+    return pose
 
 
 def load_home_position():
@@ -79,6 +87,8 @@ def move_with_retries(robot, target):
             position_tol=POSITION_TOL_MM,
             orientation_tol=ORIENTATION_TOL_DEG,
             timeout=MOVE_TIMEOUT_SEC,
+            max_linear_vel=MAX_LINEAR_VEL_MM_S,
+            max_angular_vel=MAX_ANGULAR_VEL_RAD_S,
         )
         current_pose = robot.get_current_pose()
         pos_err, ori_err = pose_error(current_pose, target)
@@ -129,6 +139,9 @@ if __name__ == "__main__":
     robot = SHERController(robot_name='SHER20')
     home_pose = load_home_position()
     if home_pose is not None:
+        if abs(home_pose[5]) > 1e-5:
+            print(f"Saved home yaw was {home_pose[5]:.6f} deg; command yaw will be normalized to 0.0 deg.")
+        home_pose = normalize_command_pose(home_pose)
         print("Saved calibration home position found:")
         print(f"  {[round(v, 3) for v in home_pose]}")
         input("Press Enter to move to this home position before validation...")
@@ -143,7 +156,7 @@ if __name__ == "__main__":
         print("Run run_calibration_poses.py first, or manually start from the intended home position.")
         input("Press Enter to use the current robot pose as the validation center...")
 
-    start_pose = robot.get_current_pose()
+    start_pose = normalize_command_pose(robot.get_current_pose())
     targets = generate_validation_poses(start_pose)
     summarize_sequence(targets)
     

@@ -3,12 +3,12 @@
 he_calibration_unified.py  —  ATI Hand-Eye Calibration  (GUI only)
 ROS1 Melodic | Python 3.6 | PyQt5
 
-No robot motion — run run_he_poses.py in a separate terminal for that.
+No robot motion - run run_calibration_poses.py in a separate terminal for that.
 
 Workflow:
   1. Press "Set Anchor" (records current pose as reference)
   2. Press SPACE any time to record a sample (robot pose + board detection)
-  3. Compute + Save when you have >=8 diverse samples
+  3. Compute + Save when you have 20 diverse samples
 """
 
 import os
@@ -18,10 +18,10 @@ import threading
 import csv
 
 import cv2
+import pyrealsense2 as rs
 import numpy as np
 import rospy
 from geometry_msgs.msg import Transform
-from sensor_msgs.msg import Image, CameraInfo
 from scipy.spatial.transform import Rotation
 from scipy.optimize import least_squares
 
@@ -39,8 +39,7 @@ from PyQt5.QtWidgets import (
 ROBOT_NAME  = 'SHER20'
 ROBOT_TOPIC = '/{}/eye_robot/FrameEE'.format(ROBOT_NAME)
 
-D405_IMAGE_TOPIC = '/d405/color/image_raw'
-D405_INFO_TOPIC  = '/d405/color/camera_info'
+CAMERA_W, CAMERA_H, CAMERA_FPS = 1280, 720, 15
 
 SQUARES_X   = 8
 SQUARES_Y   = 6
@@ -48,6 +47,8 @@ SQUARE_LEN  = 0.010
 MARKER_LEN  = 0.007
 DICT_ID     = cv2.aruco.DICT_6X6_250
 MIN_CORNERS = 4
+N_SAMPLES = 20
+MIN_ROTATION_DEG = 5.0
 
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
@@ -124,40 +125,30 @@ def _timestamp():
     return datetime.datetime.now().strftime('%d%b%Y_%H%M%S').upper()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# D405  (ROS topic)
+# D405  (direct RealSense)
 # ─────────────────────────────────────────────────────────────────────────────
 class D405Camera(object):
     def __init__(self):
-        self._lock  = threading.Lock()
-        self._frame = None
-        self.K      = None
-        self.dist   = None
-        rospy.Subscriber(D405_IMAGE_TOPIC, Image,      self._img_cb,  queue_size=1, buff_size=2**24)
-        rospy.Subscriber(D405_INFO_TOPIC,  CameraInfo, self._info_cb, queue_size=1)
-
-    def _img_cb(self, msg):
-        enc = msg.encoding.lower()
-        arr = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, -1)
-        bgr = arr[..., ::-1].copy() if enc == 'rgb8' else \
-              arr.copy()             if enc == 'bgr8' else \
-              cv2.cvtColor(arr.squeeze(), cv2.COLOR_GRAY2BGR)
-        with self._lock:
-            self._frame = bgr
-
-    def _info_cb(self, msg):
-        if self.K is not None:
-            return
-        k = msg.K
-        self.K    = np.array([[k[0],k[1],k[2]],[k[3],k[4],k[5]],[k[6],k[7],k[8]]])
-        self.dist = np.array(msg.D[:5])
+        self.pipeline = rs.pipeline()
+        config = rs.config()
+        config.enable_stream(rs.stream.color, CAMERA_W, CAMERA_H, rs.format.bgr8, CAMERA_FPS)
+        profile = self.pipeline.start(config)
+        intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+        self.K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]])
+        self.dist = np.array(intr.coeffs[:5])
+        print("D405 direct: {}x{} @ {}fps".format(CAMERA_W, CAMERA_H, CAMERA_FPS))
 
     def get_frame(self):
-        with self._lock:
-            return self._frame.copy() if self._frame is not None else None
+        frames = self.pipeline.wait_for_frames()
+        color = frames.get_color_frame()
+        return np.asanyarray(color.get_data()) if color else None
+
+    def stop(self):
+        self.pipeline.stop()
 
     @property
     def ready(self):
-        return self._frame is not None and self.K is not None
+        return self.K is not None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ChArUco  (partial board)
@@ -217,26 +208,27 @@ class HandEyeCalibrator(object):
         self.robot_poses = []
         self.board_rvecs = []
         self.board_tvecs = []
+        self._poses_log  = []   # flat rows for CSV
 
     def reset(self):
         self.__init__()
 
-    def __init__(self):
-        self.robot_poses = []
-        self.board_rvecs = []
-        self.board_tvecs = []
-        self._poses_log  = []   # flat rows for CSV
-
     def add_sample(self, robot_pose, rvec, tvec, stamp=None):
+        R_board, _ = cv2.Rodrigues(rvec)
+        is_diverse, min_angle = self._check_diversity(R_board)
+        if not is_diverse and len(self.robot_poses) > 0:
+            return False, min_angle
+
         self.robot_poses.append(robot_pose)
         self.board_rvecs.append(rvec.copy())
         self.board_tvecs.append(tvec.copy())
         euler = Rotation.from_quat(robot_pose['q']).as_euler('xyz', degrees=True)
-        board_euler = Rotation.from_rotvec(rvec.flatten()).as_euler('xyz', degrees=True)
+        board_euler = Rotation.from_matrix(R_board).as_euler('xyz', degrees=True)
         ros_secs  = stamp.secs  if stamp is not None else 0
         ros_nsecs = stamp.nsecs if stamp is not None else 0
         self._poses_log.append({
             'sample':        self.n,
+            'min_board_delta_deg': round(min_angle, 4),
             'ros_secs':      ros_secs,
             'ros_nsecs':     ros_nsecs,
             'ros_t_sec':     round(ros_secs + ros_nsecs * 1e-9, 6),
@@ -257,14 +249,29 @@ class HandEyeCalibrator(object):
             'brd_pitch_deg': round(board_euler[1], 4),
             'brd_yaw_deg':   round(board_euler[2], 4),
         })
-        return True
+        return True, min_angle
+
+    def _check_diversity(self, R_new):
+        if len(self.board_rvecs) == 0:
+            return True, 0.0
+
+        min_angle = 180.0
+        for rvec in self.board_rvecs:
+            R_existing, _ = cv2.Rodrigues(rvec)
+            cos_angle = (np.trace(R_existing.T @ R_new) - 1) / 2
+            angle = np.degrees(np.arccos(np.clip(cos_angle, -1, 1)))
+            min_angle = min(min_angle, angle)
+        return min_angle >= MIN_ROTATION_DEG, min_angle
         
     @property
     def n(self):
         return len(self.robot_poses)
 
+    def can_calibrate(self):
+        return self.n >= N_SAMPLES
+
     def calibrate(self):
-        if self.n < 8:
+        if not self.can_calibrate():
             return None
         x0 = np.zeros(12)
         def res(x):
@@ -278,6 +285,8 @@ class HandEyeCalibrator(object):
                 r.extend((RA@tY+tA-RX@tB-tX).flatten())
             return np.array(r)
         sol = least_squares(res, x0, ftol=1e-9, xtol=1e-9, max_nfev=2000)
+        if not sol.success:
+            return None
         RY=Rotation.from_rotvec(sol.x[0:3]).as_matrix(); tY=sol.x[3:6].reshape(3,1)
         RX=Rotation.from_rotvec(sol.x[6:9]).as_matrix(); tX=sol.x[9:12].reshape(3,1)
         errs=[]
@@ -307,6 +316,7 @@ class MainWindow(QMainWindow):
 
         self._anchor  = None
         self._result  = None
+        self._partial_warned = False
 
         self._build_ui()
         QShortcut(QKeySequence("Space"), self, activated=self._record)
@@ -328,7 +338,7 @@ class MainWindow(QMainWindow):
         hl.addWidget(_lbl("ATI  /  Hand-Eye Calibration  (AY = XB)",
                           "color:{};font-size:12px;font-weight:bold;".format(BLUE)))
         hl.addStretch()
-        hl.addWidget(_lbl("mode: GUI only  —  run run_he_poses.py for motion",
+        hl.addWidget(_lbl("mode: GUI only  -  run run_calibration_poses.py for motion",
                           "color:{};font-size:10px;".format(AMBER)))
         hl.addSpacing(20)
         self._cam_hdr   = _lbl("D405: waiting...", "color:{};font-size:10px;".format(DIM))
@@ -346,7 +356,8 @@ class MainWindow(QMainWindow):
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignCenter)
         self._img_lbl.setFixedSize(720,480)
-        self._img_lbl.setPixmap(_placeholder_px(720,480,"D405: "+D405_IMAGE_TOPIC))
+        self._img_lbl.setPixmap(_placeholder_px(
+            720, 480, "D405 direct: {}x{} @ {}fps".format(CAMERA_W, CAMERA_H, CAMERA_FPS)))
         fl.addWidget(self._img_lbl)
         dr = QHBoxLayout()
         self._board_lbl   = _lbl("● board  NOT DETECTED","color:{};font-size:10px;".format(RED))
@@ -368,7 +379,7 @@ class MainWindow(QMainWindow):
         # Set Anchor
         ab = QGroupBox("Set Anchor")
         al = QVBoxLayout(ab); al.setSpacing(6)
-        al.addWidget(_lbl("Press before starting run_he_poses.py.",
+        al.addWidget(_lbl("Press before starting run_calibration_poses.py.",
                           "color:{};font-size:10px;".format(DIM)))
         self._btn_anchor = _btn("Set Anchor  (current pose)","#2a5a2a",h=40)
         self._btn_anchor.clicked.connect(self._set_anchor)
@@ -381,7 +392,7 @@ class MainWindow(QMainWindow):
         # Record
         rb = QGroupBox("Record Samples")
         rl = QVBoxLayout(rb); rl.setSpacing(6)
-        self._samples_lbl = _lbl("0 samples","color:{};font-size:12px;".format(AMBER))
+        self._samples_lbl = _lbl("0 / {} samples".format(N_SAMPLES),"color:{};font-size:12px;".format(AMBER))
         self._samples_lbl.setAlignment(Qt.AlignCenter)
         rl.addWidget(self._samples_lbl)
         self._btn_space = _btn("Record  [SPACE]","#2a5a2a",h=48)
@@ -449,17 +460,26 @@ class MainWindow(QMainWindow):
             self._log_msg("x No robot pose"); return
 
         stamp = rospy.Time.now()
-        self._cal.add_sample(rp, rvec, tvec, stamp)
-        self._log_msg("v Sample {}".format(self._cal.n))
-        self._samples_lbl.setText("{} samples".format(self._cal.n))
+        accepted, min_angle = self._cal.add_sample(rp, rvec, tvec, stamp)
+        if not accepted:
+            self._log_msg("x Too similar ({:.1f} deg < {:.1f} deg); move to a more different board pose".format(
+                min_angle, MIN_ROTATION_DEG))
+            return
+
+        if self._cal.n == 1:
+            self._log_msg("v Sample {}/{}".format(self._cal.n, N_SAMPLES))
+        else:
+            self._log_msg("v Sample {}/{}  min board delta={:.1f} deg".format(
+                self._cal.n, N_SAMPLES, min_angle))
+        self._samples_lbl.setText("{} / {} samples".format(self._cal.n, N_SAMPLES))
         self._samples_lbl.setStyleSheet("color:{};font-size:12px;".format(GREEN))
-        if self._cal.n >= 8:
+        if self._cal.can_calibrate():
             self._btn_compute.setEnabled(True)
 
     def _reset(self):
         self._cal.reset()
         self._result = None
-        self._samples_lbl.setText("0 samples")
+        self._samples_lbl.setText("0 / {} samples".format(N_SAMPLES))
         self._samples_lbl.setStyleSheet("color:{};font-size:12px;".format(AMBER))
         self._btn_compute.setEnabled(False)
         self._btn_save.setEnabled(False)
@@ -472,7 +492,7 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
         r = self._cal.calibrate()
         if r is None:
-            self._err_lbl.setText("x Failed — need >=8 diverse samples")
+            self._err_lbl.setText("x Failed - need {} diverse samples".format(N_SAMPLES))
             self._err_lbl.setStyleSheet("color:{};font-size:11px;".format(RED)); return
         self._result = r
         col = GREEN if r['err_mm']<1.0 else AMBER if r['err_mm']<3.0 else RED
@@ -522,7 +542,7 @@ class MainWindow(QMainWindow):
             self._robot_hdr.setStyleSheet("color:{};font-size:10px;".format(RED))
 
         if self._cam.ready:
-            self._cam_hdr.setText("D405 v")
+            self._cam_hdr.setText("D405 direct v")
             self._cam_hdr.setStyleSheet("color:{};font-size:10px;".format(GREEN))
         elif self._cam.K is not None:
             self._cam_hdr.setText("D405: no image yet")
@@ -572,6 +592,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         self._disp_timer.stop()
+        self._cam.stop()
         event.accept()
 
 

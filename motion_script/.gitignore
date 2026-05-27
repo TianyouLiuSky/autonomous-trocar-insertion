@@ -1,2 +1,3 @@
 __pycache__/
 *.pyc
+rotation_test_logs/*.csv

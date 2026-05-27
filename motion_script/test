@@ -1,0 +1,2 @@
+cd ~/Autonomous-Trocar-Insertion/motion_script
+python3 test_rotation_limits.py --robot-name SHER20 --max-offset-deg 35 --include-diagonals

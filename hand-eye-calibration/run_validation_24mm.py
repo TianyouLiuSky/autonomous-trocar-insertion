@@ -89,6 +89,7 @@ def move_with_retries(robot, target):
             timeout=MOVE_TIMEOUT_SEC,
             max_linear_vel=MAX_LINEAR_VEL_MM_S,
             max_angular_vel=MAX_ANGULAR_VEL_RAD_S,
+            warn_on_angular_limit=False,
         )
         current_pose = robot.get_current_pose()
         pos_err, ori_err = pose_error(current_pose, target)

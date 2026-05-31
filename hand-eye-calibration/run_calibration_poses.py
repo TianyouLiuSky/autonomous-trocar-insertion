@@ -28,9 +28,12 @@ MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
 SETTLE_SEC = 2.0
 ROLL_ABS_LIMIT_DEG = 28.0
-MIN_Y_MM = -115.0
 RETURN_TO_RPY_HOME_BEFORE_START = True
 RPY_HOME_DEG = [0.0, 0.0, 0.0]
+
+X_LIMITS_MM = (-60.0, 4.0)
+Y_LIMITS_MM = (-132.0, -84.0)
+Z_LIMITS_MM = (-107.0, -89.0)
 
 TRANSLATION_RADIUS_MM = 12.0
 Z_RADIUS_MM = 12.0
@@ -73,13 +76,28 @@ def roll_within_limit(roll_deg):
     return abs(float(roll_deg)) <= ROLL_ABS_LIMIT_DEG + 1e-6
 
 
+def axis_within_limits(value, limits):
+    low, high = limits
+    return low - 1e-6 <= float(value) <= high + 1e-6
+
+
+def limits_text(limits):
+    return "[{:.3f}, {:.3f}]".format(limits[0], limits[1])
+
+
 def validate_target_pose(target, label="target"):
     target = np.asarray(target, dtype=float)
-    if target[1] < MIN_Y_MM:
-        raise ValueError(
-            f"{label} y={target[1]:.3f} mm is below the configured lower limit "
-            f"of {MIN_Y_MM:.3f} mm"
-        )
+    axis_limits = [
+        ("x", target[0], X_LIMITS_MM),
+        ("y", target[1], Y_LIMITS_MM),
+        ("z", target[2], Z_LIMITS_MM),
+    ]
+    for axis_name, value, limits in axis_limits:
+        if not axis_within_limits(value, limits):
+            raise ValueError(
+                f"{label} {axis_name}={value:.3f} mm is outside the configured "
+                f"{axis_name.upper()} limits {limits_text(limits)} mm"
+            )
     if not roll_within_limit(target[3]):
         raise ValueError(
             f"{label} roll={target[3]:.3f} deg exceeds the absolute roll limit "
@@ -87,13 +105,47 @@ def validate_target_pose(target, label="target"):
         )
 
 
-def safe_y_offsets(base_y, desired_offsets):
-    desired_offsets = np.asarray(desired_offsets, dtype=float)
-    min_target_y = base_y + np.min(desired_offsets)
-    if min_target_y >= MIN_Y_MM:
-        return desired_offsets, 0.0
-    shift = MIN_Y_MM - min_target_y
-    return desired_offsets + shift, shift
+def fit_offsets_to_limits(base_value, desired_offsets, limits, axis_name):
+    offsets = np.asarray(desired_offsets, dtype=float).copy()
+    low, high = limits
+    available_span = high - low
+    desired_span = float(np.max(offsets) - np.min(offsets))
+    scale = 1.0
+
+    if desired_span > available_span:
+        offset_center = (np.max(offsets) + np.min(offsets)) / 2.0
+        scale = available_span / desired_span
+        offsets = (offsets - offset_center) * scale + offset_center
+
+    target_low = base_value + np.min(offsets)
+    target_high = base_value + np.max(offsets)
+    shift = 0.0
+    if target_low < low:
+        shift = low - target_low
+    elif target_high > high:
+        shift = high - target_high
+    offsets = offsets + shift
+
+    target_low = base_value + np.min(offsets)
+    target_high = base_value + np.max(offsets)
+    if target_low < low - 1e-6 or target_high > high + 1e-6:
+        raise ValueError(
+            f"Cannot fit {axis_name.upper()} offsets inside limits "
+            f"{limits_text(limits)} mm from base {base_value:.3f} mm"
+        )
+
+    if scale < 1.0:
+        print(
+            f"Compressed {axis_name.upper()} offset span from {desired_span:.3f} "
+            f"to {desired_span * scale:.3f} mm to fit limits {limits_text(limits)} mm."
+        )
+    if abs(shift) > 1e-6:
+        print(
+            f"Shifted {axis_name.upper()} offsets by {shift:+.3f} mm so targets "
+            f"fit limits {limits_text(limits)} mm."
+        )
+
+    return offsets
 
 
 class MotionLogger:
@@ -253,15 +305,15 @@ def generate_diverse_poses(base_pose):
 
     tr = TRANSLATION_RADIUS_MM
     zr = Z_RADIUS_MM
-    x_offsets = np.linspace(-tr, tr, len(ROLL_TARGETS_DEG))
+    x_offsets = fit_offsets_to_limits(
+        x,
+        np.linspace(-tr, tr, len(ROLL_TARGETS_DEG)),
+        X_LIMITS_MM,
+        "x",
+    )
     desired_y_offsets = np.linspace(-tr, tr, len(PITCH_OFFSETS_DEG))
-    y_offsets, y_shift = safe_y_offsets(y, desired_y_offsets)
-
-    if y_shift > 0.0:
-        print(
-            f"Shifted calibration Y offsets by +{y_shift:.3f} mm so no target "
-            f"goes below y={MIN_Y_MM:.3f} mm."
-        )
+    y_offsets = fit_offsets_to_limits(y, desired_y_offsets, Y_LIMITS_MM, "y")
+    z_offsets = fit_offsets_to_limits(z, np.array([-zr, zr]), Z_LIMITS_MM, "z")
 
     poses = []
     for pitch_index, (dp, dy) in enumerate(zip(PITCH_OFFSETS_DEG, y_offsets)):
@@ -275,7 +327,7 @@ def generate_diverse_poses(base_pose):
                     f"Roll target {roll_abs:.3f} deg exceeds absolute limit "
                     f"+/-{ROLL_ABS_LIMIT_DEG:.1f} deg"
                 )
-            dz = -zr if (pitch_index + roll_index) % 2 == 0 else zr
+            dz = z_offsets[0] if (pitch_index + roll_index) % 2 == 0 else z_offsets[1]
             target = [x + dx, y + dy, z + dz, roll_abs, p + dp, 0.0]
             validate_target_pose(target, label=f"generated pose {len(poses) + 1}")
             poses.append({
@@ -306,6 +358,7 @@ def move_with_retries(robot, target, logger=None, pose_index=None, total=None, l
                 timeout=MOVE_TIMEOUT_SEC,
                 max_linear_vel=MAX_LINEAR_VEL_MM_S,
                 max_angular_vel=MAX_ANGULAR_VEL_RAD_S,
+                warn_on_angular_limit=False,
             )
             status = "controller_success" if success else "controller_timeout"
         finally:
@@ -386,11 +439,17 @@ def summarize_sequence(targets):
     print("Calibration pose sequence")
     print(f"  Poses: {len(targets)}")
     print(f"  XYZ span (mm): {np.ptp(xyz, axis=0).round(3).tolist()}")
+    print(f"  XYZ min (mm): {np.min(xyz, axis=0).round(3).tolist()}")
+    print(f"  XYZ max (mm): {np.max(xyz, axis=0).round(3).tolist()}")
+    print(
+        "  Workspace limits (mm): "
+        f"x={limits_text(X_LIMITS_MM)}, "
+        f"y={limits_text(Y_LIMITS_MM)}, "
+        f"z={limits_text(Z_LIMITS_MM)}"
+    )
     print(f"  RPY span (deg): {np.ptp(rpy, axis=0).round(3).tolist()}")
     print(f"  RPY min (deg): {np.min(rpy, axis=0).round(3).tolist()}")
     print(f"  RPY max (deg): {np.max(rpy, axis=0).round(3).tolist()}")
-    print(f"  Minimum target Y (mm): {np.min(xyz[:, 1]):.3f}")
-    print(f"  Y lower limit (mm): {MIN_Y_MM:.3f}")
     max_abs_roll = np.max(np.abs(rpy[:, 0]))
     print(f"  Absolute roll limit (deg): +/-{ROLL_ABS_LIMIT_DEG:.1f}")
     if max_abs_roll > ROLL_ABS_LIMIT_DEG:

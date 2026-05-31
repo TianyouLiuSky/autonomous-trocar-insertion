@@ -76,10 +76,11 @@ This file stores `[x, y, z, roll, pitch, yaw]` in millimeters and degrees. It is
 used later by validation so both calibration and validation can start from the
 same physical home position.
 
-The script then generates 20 poses:
+The script then generates 20 poses inside the measured absolute robot workspace:
 
-- XYZ span: `24 x 24 x 24 mm`
-- Roll offsets: `[-12, -6, 0, 6, 12] deg`
+- Workspace limits: `x [-60, 4] mm`, `y [-132, -84] mm`, `z [-107, -89] mm`
+- Desired XYZ span: up to `24 x 24 x 24 mm`, automatically compressed or shifted if needed
+- Absolute roll targets: `[-12, -6, 0, 6, 12] deg`
 - Pitch offsets: `[-9, -3, 3, 9] deg`
 - Neighboring orientation difference: at least `6 deg`
 - Move timeout: `90 s`

@@ -74,7 +74,8 @@ class SHERController:
         return np.concatenate([pos, euler])
         
     def no_rcm_move_to(self, target_pose, position_tol=0.005, orientation_tol=0.1,
-                       timeout=30.0, max_linear_vel=5.0, max_angular_vel=5.0):
+                       timeout=30.0, max_linear_vel=5.0, max_angular_vel=5.0,
+                       warn_on_angular_limit=True):
         """
         Move to target pose without RCM constraint using proportional control with velocity saturation
 
@@ -88,6 +89,7 @@ class SHERController:
             timeout: maximum time in seconds (default: 30.0)
             max_linear_vel: maximum linear velocity in mm/s (default: 1.0 for surgery)
             max_angular_vel: maximum angular velocity in rad/s (default: 0.05 for surgery)
+            warn_on_angular_limit: print when angular velocity is clipped
 
         Returns:
             bool: True if reached target, False if timeout
@@ -149,7 +151,8 @@ class SHERController:
             angular_vel = axis_angle * self.angular_gain  # rad/s
             angular_vel_norm = np.linalg.norm(angular_vel)
             if angular_vel_norm > max_angular_vel:
-                print("Warning, reach angular limit")
+                if warn_on_angular_limit:
+                    print("Warning, reach angular limit")
                 angular_vel = (angular_vel / angular_vel_norm) * max_angular_vel
 
             # Publish commands (linear in mm/s, angular in RAD/s)
@@ -161,7 +164,8 @@ class SHERController:
         return False
 
     def rcm_move_to(self, target_pos, rcm_point, rcm_axis_tol=1.0, position_tol=0.005,
-                    orientation_tol=0.1, timeout=30.0, max_linear_vel=5.0, max_angular_vel=5.0):
+                    orientation_tol=0.1, timeout=30.0, max_linear_vel=5.0,
+                    max_angular_vel=5.0, warn_on_angular_limit=True):
 
         #TODO: Huge bug in this, do not run
         """
@@ -178,6 +182,7 @@ class SHERController:
             timeout: Maximum time in seconds (default: 30.0)
             max_linear_vel: Maximum linear velocity in mm/s (default: 5.0)
             max_angular_vel: Maximum angular velocity in rad/s (default: 5.0)
+            warn_on_angular_limit: print when angular velocity is clipped
 
         Returns:
             bool: True if reached target, False if timeout or invalid RCM point
@@ -274,7 +279,8 @@ class SHERController:
             angular_vel = axis_angle * self.angular_gain  # rad/s
             angular_vel_norm = np.linalg.norm(angular_vel)
             if angular_vel_norm > max_angular_vel:
-                print("Warning, reach angular limit")
+                if warn_on_angular_limit:
+                    print("Warning, reach angular limit")
                 angular_vel = (angular_vel / angular_vel_norm) * max_angular_vel
 
             # Publish commands

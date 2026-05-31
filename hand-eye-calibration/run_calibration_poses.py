@@ -35,7 +35,7 @@ RPY_HOME_DEG = [0.0, 0.0, 0.0]
 
 # Absolute robot workspace limits in FrameEE coordinates.
 # x positive: inward/forward, y positive: left, z positive: up.
-X_LIMITS_MM = (-42.0, 10.0)
+X_LIMITS_MM = (-40.0, 10.0)
 Y_LIMITS_MM = (-130.0, -85.0)
 Z_LIMITS_MM = (-13.0, 26.0)
 

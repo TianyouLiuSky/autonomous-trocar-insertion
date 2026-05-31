@@ -21,8 +21,11 @@ HOME_PATH = HOME_DIR / "home_position.json"
 MOTION_LOG_DIR = Path(__file__).resolve().parent / "motion_logs"
 MOTION_LOG_HZ = 10.0
 MOVE_TIMEOUT_SEC = 90.0
-POSITION_TOL_MM = 0.5
-ORIENTATION_TOL_DEG = 0.5
+# Hand-eye records the measured robot pose, so the commanded target does not
+# need sub-millimeter agreement. This tolerance prevents near-boundary poses
+# from waiting until timeout when the robot is already usable for capture.
+POSITION_TOL_MM = 4.0
+ORIENTATION_TOL_DEG = 1.0
 MAX_MOVE_ATTEMPTS = 2
 MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
@@ -41,6 +44,12 @@ TRANSLATION_RADIUS_MM = 12.0
 Z_RADIUS_MM = 12.0
 ROLL_TARGETS_DEG = [-12.0, -6.0, 0.0, 6.0, 12.0]
 PITCH_OFFSETS_DEG = [-9.0, -3.0, 3.0, 9.0]
+QUIT_COMMANDS = {"Q", "QUIT", "q"}
+RECORD_ANYWAY_COMMAND = {"R", "r"}
+
+
+def is_quit_command(answer):
+    return answer.strip().upper() in QUIT_COMMANDS
 
 
 def orientation_error_rotvec_deg(current_pose, target_pose):
@@ -421,7 +430,11 @@ def wait_for_gui_capture(index, total, target, actual_pose):
     print(f"Actual: {[round(v, 3) for v in actual_pose]}")
     print(f"Settling for {SETTLE_SEC:.1f}s before capture...")
     time.sleep(SETTLE_SEC)
-    input("Record this sample in the calibration GUI, then press Enter here to continue...")
+    answer = input(
+        "Record this sample in the calibration GUI, then press Enter here to continue, "
+        "or type Q to stop after this sample: "
+    )
+    return is_quit_command(answer)
 
 
 def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
@@ -430,8 +443,13 @@ def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
     print(f"Target: {[round(v, 3) for v in target]}")
     print(f"Actual: {[round(v, 3) for v in actual_pose]}")
     print(f"Residual: position={pos_err:.3f} mm, orientation={ori_err:.3f} deg")
-    answer = input("Skip this pose? Press Enter to skip, or type RECORD to capture anyway: ")
-    return answer.strip().upper() == "RECORD"
+    answer = input("Press Enter to skip, type R to capture anyway, or type Q to stop: ")
+    answer = answer.strip().upper()
+    if answer in QUIT_COMMANDS:
+        return "quit"
+    if answer == RECORD_ANYWAY_COMMAND:
+        return "record"
+    return "skip"
 
 
 def summarize_sequence(targets):
@@ -460,6 +478,7 @@ def summarize_sequence(targets):
             f"limit. Max abs roll: {max_abs_roll:.3f}"
         )
     print(f"  Timeout: {MOVE_TIMEOUT_SEC:.1f}s")
+    print(f"  Reach tolerance: {POSITION_TOL_MM:.1f} mm, {ORIENTATION_TOL_DEG:.1f} deg")
     print(f"  Max angular velocity: {MAX_ANGULAR_VEL_RAD_S:.3f} rad/s")
     print("  Capture flow: move -> settle -> record in GUI -> press Enter here")
 
@@ -467,6 +486,7 @@ def summarize_sequence(targets):
 def run_sequence(robot, targets, logger=None):
     recorded = 0
     skipped = 0
+    stopped = False
     total = len(targets)
 
     for i, entry in enumerate(targets, start=1):
@@ -475,6 +495,11 @@ def run_sequence(robot, targets, logger=None):
         print("=" * 80)
         print(f"Moving to Pose {i}/{total} ({entry['label']}): {[round(v, 3) for v in target]}")
         print("=" * 80)
+        answer = input("Press Enter to move to this pose, or type Q to stop the run: ")
+        if is_quit_command(answer):
+            print("Stopped before moving to this pose.")
+            stopped = True
+            break
 
         success, actual_pose, pos_err, ori_err = move_with_retries(
             robot,
@@ -486,16 +511,28 @@ def run_sequence(robot, targets, logger=None):
         )
 
         if success:
-            wait_for_gui_capture(i, total, target, actual_pose)
+            stop_after_capture = wait_for_gui_capture(i, total, target, actual_pose)
             recorded += 1
-        elif ask_accept_failed_pose(i, total, target, actual_pose, pos_err, ori_err):
-            wait_for_gui_capture(i, total, target, actual_pose)
-            recorded += 1
+            if stop_after_capture:
+                stopped = True
+                break
         else:
-            print("Skipped. Do not record this pose in the GUI.")
-            skipped += 1
+            action = ask_accept_failed_pose(i, total, target, actual_pose, pos_err, ori_err)
+            if action == "record":
+                stop_after_capture = wait_for_gui_capture(i, total, target, actual_pose)
+                recorded += 1
+                if stop_after_capture:
+                    stopped = True
+                    break
+            elif action == "quit":
+                print("Stopped after failed pose.")
+                stopped = True
+                break
+            else:
+                print("Skipped. Do not record this pose in the GUI.")
+                skipped += 1
 
-    return recorded, skipped
+    return recorded, skipped, stopped
 
 
 if __name__ == "__main__":
@@ -535,21 +572,31 @@ if __name__ == "__main__":
         print("")
         print("MAKE SURE handeye_calibration.py IS RUNNING AND THE BOARD IS VISIBLE.")
         print(f"Motion diagnostics will be written under: {MOTION_LOG_DIR}")
-        input("Press Enter to start moving through calibration poses...")
+        answer = input("Press Enter to start moving through calibration poses, or type Q to stop: ")
+        if is_quit_command(answer):
+            raise SystemExit("Calibration stopped before pose sequence.")
 
-        recorded, skipped = run_sequence(robot, targets, logger=logger)
+        recorded, skipped, stopped = run_sequence(robot, targets, logger=logger)
 
         print("")
-        print(f"Sequence complete. Recorded={recorded}, skipped={skipped}.")
-        print("Returning to the saved home position...")
-        move_with_retries(
-            robot,
-            start_pose,
-            logger=logger,
-            pose_index=len(targets) + 1,
-            total=len(targets) + 1,
-            label="return_home",
-        )
+        status_text = "stopped" if stopped else "complete"
+        print(f"Sequence {status_text}. Recorded={recorded}, skipped={skipped}.")
+        return_answer = ""
+        if stopped:
+            return_answer = input(
+                "Press Enter to return to the saved home position, "
+                "or type Q to leave the robot at the current pose: "
+            )
+        if not is_quit_command(return_answer):
+            print("Returning to the saved home position...")
+            move_with_retries(
+                robot,
+                start_pose,
+                logger=logger,
+                pose_index=len(targets) + 1,
+                total=len(targets) + 1,
+                label="return_home",
+            )
         print("Click 'Compute Calibration' in the GUI when you have enough accepted samples.")
     finally:
         sample_path, summary_path = logger.write()

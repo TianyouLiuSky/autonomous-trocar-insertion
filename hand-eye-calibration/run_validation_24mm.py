@@ -12,19 +12,27 @@ from SHER_Controller import SHERController
 
 HOME_PATH = Path(__file__).resolve().parent / "home_position" / "home_position.json"
 MOVE_TIMEOUT_SEC = 90.0
-POSITION_TOL_MM = 0.5
-ORIENTATION_TOL_DEG = 0.5
+# Validation records the measured robot pose, so the commanded target does not
+# need sub-millimeter agreement.
+POSITION_TOL_MM = 4.0
+ORIENTATION_TOL_DEG = 1.0
 MAX_MOVE_ATTEMPTS = 2
 MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
 SETTLE_SEC = 2.0
 ROLL_ABS_LIMIT_DEG = 28.0
+QUIT_COMMANDS = {"Q", "QUIT", "q"}
+RECORD_ANYWAY_COMMAND = {"R", "r"}
 
 # Absolute robot workspace limits in FrameEE coordinates.
 # x positive: inward/forward, y positive: left, z positive: up.
 X_LIMITS_MM = (-42.0, 10.0)
 Y_LIMITS_MM = (-133.0, -85.0)
 Z_LIMITS_MM = (-13.0, 30.0)
+
+
+def is_quit_command(answer):
+    return answer.strip().upper() in QUIT_COMMANDS
 
 
 def pose_error(current_pose, target_pose):
@@ -204,7 +212,11 @@ def wait_for_gui_capture(index, total, target, actual_pose):
     print(f"Actual: {[round(v, 3) for v in actual_pose]}")
     print(f"Settling for {SETTLE_SEC:.1f}s before capture...")
     time.sleep(SETTLE_SEC)
-    input("Record this sample in the validation collector, then press Enter here to continue...")
+    answer = input(
+        "Record this sample in the validation collector, then press Enter here to continue, "
+        "or type Q to stop after this sample: "
+    )
+    return is_quit_command(answer)
 
 
 def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
@@ -213,8 +225,13 @@ def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
     print(f"Target: {[round(v, 3) for v in target]}")
     print(f"Actual: {[round(v, 3) for v in actual_pose]}")
     print(f"Residual: position={pos_err:.3f} mm, orientation={ori_err:.3f} deg")
-    answer = input("Skip this pose? Press Enter to skip, or type RECORD to capture anyway: ")
-    return answer.strip().upper() == "RECORD"
+    answer = input("Press Enter to skip, type R to capture anyway, or type Q to stop: ")
+    answer = answer.strip().upper()
+    if answer in QUIT_COMMANDS:
+        return "quit"
+    if answer == RECORD_ANYWAY_COMMAND:
+        return "record"
+    return "skip"
 
 
 def summarize_sequence(targets):
@@ -234,6 +251,7 @@ def summarize_sequence(targets):
     )
     print(f"  RPY span (deg): {np.ptp(rpy, axis=0).round(3).tolist()}")
     print(f"  Absolute roll limit (deg): +/-{ROLL_ABS_LIMIT_DEG:.1f}")
+    print(f"  Reach tolerance: {POSITION_TOL_MM:.1f} mm, {ORIENTATION_TOL_DEG:.1f} deg")
     print("  Capture flow: move -> settle -> record in collector -> press Enter here")
 
 if __name__ == "__main__":
@@ -268,19 +286,39 @@ if __name__ == "__main__":
 
     recorded = 0
     skipped = 0
+    stopped = False
     for i, target in enumerate(targets, start=1):
         print(f"\nMoving to Pose {i}/27: {target}")
+        answer = input("Press Enter to move to this pose, or type Q to stop the run: ")
+        if is_quit_command(answer):
+            print("Stopped before moving to this pose.")
+            stopped = True
+            break
+
         success, actual_pose, pos_err, ori_err = move_with_retries(robot, target)
 
         if success:
-            wait_for_gui_capture(i, len(targets), target, actual_pose)
+            stop_after_capture = wait_for_gui_capture(i, len(targets), target, actual_pose)
             recorded += 1
-        elif ask_accept_failed_pose(i, len(targets), target, actual_pose, pos_err, ori_err):
-            wait_for_gui_capture(i, len(targets), target, actual_pose)
-            recorded += 1
+            if stop_after_capture:
+                stopped = True
+                break
         else:
-            print("Skipped. Do not record this validation pose.")
-            skipped += 1
+            action = ask_accept_failed_pose(i, len(targets), target, actual_pose, pos_err, ori_err)
+            if action == "record":
+                stop_after_capture = wait_for_gui_capture(i, len(targets), target, actual_pose)
+                recorded += 1
+                if stop_after_capture:
+                    stopped = True
+                    break
+            elif action == "quit":
+                print("Stopped after failed pose.")
+                stopped = True
+                break
+            else:
+                print("Skipped. Do not record this validation pose.")
+                skipped += 1
 
-    print(f"\nSequence complete. Recorded={recorded}, skipped={skipped}.")
+    status_text = "stopped" if stopped else "complete"
+    print(f"\nSequence {status_text}. Recorded={recorded}, skipped={skipped}.")
     print("The data collector should save automatically once it has enough samples.")

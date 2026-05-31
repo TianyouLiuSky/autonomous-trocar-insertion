@@ -84,20 +84,23 @@ The script then generates 20 poses inside the measured absolute robot workspace:
 - Pitch offsets: `[-9, -3, 3, 9] deg`
 - Neighboring orientation difference: at least `6 deg`
 - Move timeout: `90 s`
+- Reach tolerance: `4 mm` position, `1 deg` orientation
 - Max angular velocity: `0.05 rad/s`
 
 At each pose, wait for the motion terminal to say the pose is ready. Then:
 
 1. In the GUI, press `SPACE` or click `Record`.
 2. Confirm the sample count increased.
-3. Return to the motion terminal and press `Enter`.
+3. Return to the motion terminal and press `Enter`, or type `Q` to stop after that sample.
 
 If the motion script reports that a pose did not fully reach the target, skip it
-unless you have a clear reason to keep it. Bad pose/image pairs are worse than
-having fewer samples.
+unless you have a clear reason to keep it. Type `R` to record anyway, or `Q` to
+stop the remaining pose run. Bad pose/image pairs are worse than having fewer
+samples.
 
 After the last pose, the motion script returns the robot to the saved home
-position.
+position. If you stop early with `Q`, the script asks whether to return home or
+leave the robot at the current pose.
 
 The motion script also writes diagnostic CSV logs under:
 

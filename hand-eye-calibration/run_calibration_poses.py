@@ -27,11 +27,14 @@ MAX_MOVE_ATTEMPTS = 2
 MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
 SETTLE_SEC = 2.0
-ROTATION_SOFT_LIMIT_DEG = 55.0
+ROLL_ABS_LIMIT_DEG = 28.0
+MIN_Y_MM = -115.0
+RETURN_TO_RPY_HOME_BEFORE_START = True
+RPY_HOME_DEG = [0.0, 0.0, 0.0]
 
 TRANSLATION_RADIUS_MM = 12.0
 Z_RADIUS_MM = 12.0
-ROLL_OFFSETS_DEG = [-12.0, -6.0, 0.0, 6.0, 12.0]
+ROLL_TARGETS_DEG = [-12.0, -6.0, 0.0, 6.0, 12.0]
 PITCH_OFFSETS_DEG = [-9.0, -3.0, 3.0, 9.0]
 
 
@@ -64,6 +67,33 @@ def normalize_command_pose(pose):
     pose = np.asarray(pose, dtype=float).copy()
     pose[5] = 0.0
     return pose
+
+
+def roll_within_limit(roll_deg):
+    return abs(float(roll_deg)) <= ROLL_ABS_LIMIT_DEG + 1e-6
+
+
+def validate_target_pose(target, label="target"):
+    target = np.asarray(target, dtype=float)
+    if target[1] < MIN_Y_MM:
+        raise ValueError(
+            f"{label} y={target[1]:.3f} mm is below the configured lower limit "
+            f"of {MIN_Y_MM:.3f} mm"
+        )
+    if not roll_within_limit(target[3]):
+        raise ValueError(
+            f"{label} roll={target[3]:.3f} deg exceeds the absolute roll limit "
+            f"+/-{ROLL_ABS_LIMIT_DEG:.1f} deg"
+        )
+
+
+def safe_y_offsets(base_y, desired_offsets):
+    desired_offsets = np.asarray(desired_offsets, dtype=float)
+    min_target_y = base_y + np.min(desired_offsets)
+    if min_target_y >= MIN_Y_MM:
+        return desired_offsets, 0.0
+    shift = MIN_Y_MM - min_target_y
+    return desired_offsets + shift, shift
 
 
 class MotionLogger:
@@ -192,7 +222,7 @@ class MotionLogger:
             stop_event.wait(self.sample_period)
 
 
-def save_home_position(home_pose, measured_pose=None):
+def save_home_position(home_pose, measured_pose=None, pre_home_pose=None):
     HOME_DIR.mkdir(parents=True, exist_ok=True)
     data = {
         "pose_mm_deg": [float(v) for v in home_pose],
@@ -202,6 +232,8 @@ def save_home_position(home_pose, measured_pose=None):
     }
     if measured_pose is not None:
         data["measured_start_pose_mm_deg"] = [float(v) for v in measured_pose]
+    if pre_home_pose is not None:
+        data["pre_rpy_home_pose_mm_deg"] = [float(v) for v in pre_home_pose]
     with open(HOME_PATH, "w") as f:
         json.dump(data, f, indent=2)
     print(f"Saved home position -> {HOME_PATH}")
@@ -211,34 +243,51 @@ def generate_diverse_poses(base_pose):
     """
     Generate exactly 20 reachable hand-eye poses around the current pose.
 
-    The grid uses 5 roll offsets x 4 pitch offsets. Neighboring orientations are
-    spaced by 6 degrees, so every adjacent case clears the 5 degree diversity
-    requirement while also adding moderate XYZ translation diversity.
+    The grid uses 5 absolute roll targets x 4 pitch offsets. Roll is absolute
+    robot roll, not a relative offset from the starting pose. Neighboring
+    orientations are spaced by 6 degrees, so every adjacent case clears the 5
+    degree diversity requirement while also adding moderate XYZ translation
+    diversity.
     """
     x, y, z, r, p, _ = base_pose
 
     tr = TRANSLATION_RADIUS_MM
     zr = Z_RADIUS_MM
-    x_offsets = np.linspace(-tr, tr, len(ROLL_OFFSETS_DEG))
-    y_offsets = np.linspace(-tr, tr, len(PITCH_OFFSETS_DEG))
+    x_offsets = np.linspace(-tr, tr, len(ROLL_TARGETS_DEG))
+    desired_y_offsets = np.linspace(-tr, tr, len(PITCH_OFFSETS_DEG))
+    y_offsets, y_shift = safe_y_offsets(y, desired_y_offsets)
+
+    if y_shift > 0.0:
+        print(
+            f"Shifted calibration Y offsets by +{y_shift:.3f} mm so no target "
+            f"goes below y={MIN_Y_MM:.3f} mm."
+        )
 
     poses = []
     for pitch_index, (dp, dy) in enumerate(zip(PITCH_OFFSETS_DEG, y_offsets)):
-        roll_order = list(zip(ROLL_OFFSETS_DEG, x_offsets))
+        roll_order = list(zip(ROLL_TARGETS_DEG, x_offsets))
         if pitch_index % 2 == 1:
             roll_order.reverse()
 
-        for roll_index, (dr, dx) in enumerate(roll_order):
+        for roll_index, (roll_abs, dx) in enumerate(roll_order):
+            if not roll_within_limit(roll_abs):
+                raise ValueError(
+                    f"Roll target {roll_abs:.3f} deg exceeds absolute limit "
+                    f"+/-{ROLL_ABS_LIMIT_DEG:.1f} deg"
+                )
             dz = -zr if (pitch_index + roll_index) % 2 == 0 else zr
+            target = [x + dx, y + dy, z + dz, roll_abs, p + dp, 0.0]
+            validate_target_pose(target, label=f"generated pose {len(poses) + 1}")
             poses.append({
-                "label": f"r{dr:+.0f}_p{dp:+.0f}",
-                "target": [x + dx, y + dy, z + dz, r + dr, p + dp, 0.0],
+                "label": f"r{roll_abs:+.0f}_p{dp:+.0f}",
+                "target": target,
             })
 
     return poses
 
 
 def move_with_retries(robot, target, logger=None, pose_index=None, total=None, label=""):
+    validate_target_pose(target, label=label or "target")
     current_pose = robot.get_current_pose()
     pos_err, ori_err = pose_error(current_pose, target)
 
@@ -290,6 +339,26 @@ def move_with_retries(robot, target, logger=None, pose_index=None, total=None, l
     return False, current_pose, pos_err, ori_err
 
 
+def move_to_rpy_home(robot, logger=None):
+    current_pose = normalize_command_pose(robot.get_current_pose())
+    target = current_pose.copy()
+    target[3:] = np.array(RPY_HOME_DEG, dtype=float)
+
+    print("")
+    print("Returning RPY to calibration home before starting:")
+    print(f"  Current RPY: {[round(v, 3) for v in current_pose[3:]]}")
+    print(f"  Target RPY:  {[round(v, 3) for v in target[3:]]}")
+
+    return move_with_retries(
+        robot,
+        target,
+        logger=logger,
+        pose_index=0,
+        total=0,
+        label="rpy_home",
+    )
+
+
 def wait_for_gui_capture(index, total, target, actual_pose):
     print("")
     print(f"Pose {index}/{total} is ready to capture.")
@@ -320,11 +389,14 @@ def summarize_sequence(targets):
     print(f"  RPY span (deg): {np.ptp(rpy, axis=0).round(3).tolist()}")
     print(f"  RPY min (deg): {np.min(rpy, axis=0).round(3).tolist()}")
     print(f"  RPY max (deg): {np.max(rpy, axis=0).round(3).tolist()}")
-    max_abs_roll_pitch = np.max(np.abs(rpy[:, :2]), axis=0)
-    if np.any(max_abs_roll_pitch > ROTATION_SOFT_LIMIT_DEG):
+    print(f"  Minimum target Y (mm): {np.min(xyz[:, 1]):.3f}")
+    print(f"  Y lower limit (mm): {MIN_Y_MM:.3f}")
+    max_abs_roll = np.max(np.abs(rpy[:, 0]))
+    print(f"  Absolute roll limit (deg): +/-{ROLL_ABS_LIMIT_DEG:.1f}")
+    if max_abs_roll > ROLL_ABS_LIMIT_DEG:
         print(
-            "  WARNING: roll/pitch targets approach the paper's +/-60 deg "
-            f"range. Max abs roll/pitch: {max_abs_roll_pitch.round(3).tolist()}"
+            "  WARNING: generated roll targets exceed the configured absolute "
+            f"limit. Max abs roll: {max_abs_roll:.3f}"
         )
     print(f"  Timeout: {MOVE_TIMEOUT_SEC:.1f}s")
     print(f"  Max angular velocity: {MAX_ANGULAR_VEL_RAD_S:.3f} rad/s")
@@ -369,22 +441,41 @@ if __name__ == "__main__":
     robot = SHERController(robot_name="SHER20")
     logger = MotionLogger(robot)
 
-    measured_start_pose = robot.get_current_pose()
-    start_pose = normalize_command_pose(measured_start_pose)
-    if abs(measured_start_pose[5]) > 1e-5:
-        print(f"Measured home yaw was {measured_start_pose[5]:.6f} deg; command home yaw saved as 0.0 deg.")
-    save_home_position(start_pose, measured_pose=measured_start_pose)
-    targets = generate_diverse_poses(start_pose)
-    summarize_sequence(targets)
-
-    print("")
-    print("MAKE SURE handeye_calibration.py IS RUNNING AND THE BOARD IS VISIBLE.")
-    print(f"Motion diagnostics will be written under: {MOTION_LOG_DIR}")
-    input("Press Enter to start moving through calibration poses...")
-
     recorded = 0
     skipped = 0
     try:
+        pre_home_pose = normalize_command_pose(robot.get_current_pose())
+
+        if RETURN_TO_RPY_HOME_BEFORE_START:
+            answer = input(
+                "Press Enter to move to RPY home [0, 0, 0] before calibration, "
+                "or type SKIP to use the current orientation: "
+            )
+            if answer.strip().upper() == "SKIP":
+                print("Skipping RPY home move; calibration poses will still use absolute roll targets.")
+            else:
+                home_reached, actual_home, pos_err, ori_err = move_to_rpy_home(robot, logger=logger)
+                if not home_reached:
+                    print("")
+                    print("RPY home was not fully reached.")
+                    print(f"Residual: position={pos_err:.3f} mm, orientation={ori_err:.3f} deg")
+                    answer = input("Press Enter to stop, or type CONTINUE to generate poses from the actual pose: ")
+                    if answer.strip().upper() != "CONTINUE":
+                        raise SystemExit("Calibration stopped before pose sequence.")
+
+        measured_start_pose = robot.get_current_pose()
+        start_pose = normalize_command_pose(measured_start_pose)
+        if abs(measured_start_pose[5]) > 1e-5:
+            print(f"Measured home yaw was {measured_start_pose[5]:.6f} deg; command home yaw saved as 0.0 deg.")
+        save_home_position(start_pose, measured_pose=measured_start_pose, pre_home_pose=pre_home_pose)
+        targets = generate_diverse_poses(start_pose)
+        summarize_sequence(targets)
+
+        print("")
+        print("MAKE SURE handeye_calibration.py IS RUNNING AND THE BOARD IS VISIBLE.")
+        print(f"Motion diagnostics will be written under: {MOTION_LOG_DIR}")
+        input("Press Enter to start moving through calibration poses...")
+
         recorded, skipped = run_sequence(robot, targets, logger=logger)
 
         print("")

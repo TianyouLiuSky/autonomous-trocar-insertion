@@ -18,6 +18,13 @@ MAX_MOVE_ATTEMPTS = 2
 MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
 SETTLE_SEC = 2.0
+ROLL_ABS_LIMIT_DEG = 28.0
+
+# Absolute robot workspace limits in FrameEE coordinates.
+# x positive: inward/forward, y positive: left, z positive: up.
+X_LIMITS_MM = (-42.0, 10.0)
+Y_LIMITS_MM = (-133.0, -85.0)
+Z_LIMITS_MM = (-13.0, 30.0)
 
 
 def pose_error(current_pose, target_pose):
@@ -34,6 +41,82 @@ def normalize_command_pose(pose):
     return pose
 
 
+def limits_text(limits):
+    return "[{:.3f}, {:.3f}]".format(limits[0], limits[1])
+
+
+def axis_within_limits(value, limits):
+    low, high = limits
+    return low - 1e-6 <= float(value) <= high + 1e-6
+
+
+def roll_within_limit(roll_deg):
+    return abs(float(roll_deg)) <= ROLL_ABS_LIMIT_DEG + 1e-6
+
+
+def validate_target_pose(target, label="target"):
+    target = np.asarray(target, dtype=float)
+    axis_limits = [
+        ("x", target[0], X_LIMITS_MM),
+        ("y", target[1], Y_LIMITS_MM),
+        ("z", target[2], Z_LIMITS_MM),
+    ]
+    for axis_name, value, limits in axis_limits:
+        if not axis_within_limits(value, limits):
+            raise ValueError(
+                f"{label} {axis_name}={value:.3f} mm is outside the configured "
+                f"{axis_name.upper()} limits {limits_text(limits)} mm"
+            )
+    if not roll_within_limit(target[3]):
+        raise ValueError(
+            f"{label} roll={target[3]:.3f} deg exceeds the absolute roll limit "
+            f"+/-{ROLL_ABS_LIMIT_DEG:.1f} deg"
+        )
+
+
+def fit_offsets_to_limits(base_value, desired_offsets, limits, axis_name):
+    offsets = np.asarray(desired_offsets, dtype=float).copy()
+    low, high = limits
+    available_span = high - low
+    desired_span = float(np.max(offsets) - np.min(offsets))
+    scale = 1.0
+
+    if desired_span > available_span:
+        offset_center = (np.max(offsets) + np.min(offsets)) / 2.0
+        scale = available_span / desired_span
+        offsets = (offsets - offset_center) * scale + offset_center
+
+    target_low = base_value + np.min(offsets)
+    target_high = base_value + np.max(offsets)
+    shift = 0.0
+    if target_low < low:
+        shift = low - target_low
+    elif target_high > high:
+        shift = high - target_high
+    offsets = offsets + shift
+
+    target_low = base_value + np.min(offsets)
+    target_high = base_value + np.max(offsets)
+    if target_low < low - 1e-6 or target_high > high + 1e-6:
+        raise ValueError(
+            f"Cannot fit {axis_name.upper()} offsets inside limits "
+            f"{limits_text(limits)} mm from base {base_value:.3f} mm"
+        )
+
+    if scale < 1.0:
+        print(
+            f"Compressed {axis_name.upper()} offset span from {desired_span:.3f} "
+            f"to {desired_span * scale:.3f} mm to fit limits {limits_text(limits)} mm."
+        )
+    if abs(shift) > 1e-6:
+        print(
+            f"Shifted {axis_name.upper()} offsets by {shift:+.3f} mm so targets "
+            f"fit limits {limits_text(limits)} mm."
+        )
+
+    return offsets
+
+
 def load_home_position():
     if not HOME_PATH.exists():
         return None
@@ -48,6 +131,12 @@ def generate_validation_poses(base_pose):
     """
     poses = []
     x, y, z, r, p, y_yaw = base_pose
+    x_values = fit_offsets_to_limits(x, np.array([-12.0, 0.0, 12.0]), X_LIMITS_MM, "x")
+    y_values = fit_offsets_to_limits(y, np.array([-12.0, 0.0, 12.0]), Y_LIMITS_MM, "y")
+    z_values = fit_offsets_to_limits(z, np.array([-12.0, 0.0, 12.0]), Z_LIMITS_MM, "z")
+    x_map = {-12: x_values[0], 0: x_values[1], 12: x_values[2]}
+    y_map = {-12: y_values[0], 0: y_values[1], 12: y_values[2]}
+    z_map = {-12: z_values[0], 0: z_values[1], 12: z_values[2]}
     
     # Format: [X, Y, Z, Roll, Pitch, Yaw]
     offsets = [
@@ -69,14 +158,16 @@ def generate_validation_poses(base_pose):
     
     for offset in offsets:
         new_pose = [
-            x + offset[0], y + offset[1], z + offset[2],
+            x + x_map[offset[0]], y + y_map[offset[1]], z + z_map[offset[2]],
             r + offset[3], p + offset[4], y_yaw + offset[5]
         ]
+        validate_target_pose(new_pose, label=f"generated validation pose {len(poses) + 1}")
         poses.append(new_pose)
     return poses
 
 
 def move_with_retries(robot, target):
+    validate_target_pose(target)
     current_pose = robot.get_current_pose()
     pos_err, ori_err = pose_error(current_pose, target)
 
@@ -133,7 +224,16 @@ def summarize_sequence(targets):
     print("Validation pose sequence")
     print(f"  Poses: {len(targets)}")
     print(f"  XYZ span (mm): {np.ptp(xyz, axis=0).round(3).tolist()}")
+    print(f"  XYZ min (mm): {np.min(xyz, axis=0).round(3).tolist()}")
+    print(f"  XYZ max (mm): {np.max(xyz, axis=0).round(3).tolist()}")
+    print(
+        "  Workspace limits (mm): "
+        f"x={limits_text(X_LIMITS_MM)}, "
+        f"y={limits_text(Y_LIMITS_MM)}, "
+        f"z={limits_text(Z_LIMITS_MM)}"
+    )
     print(f"  RPY span (deg): {np.ptp(rpy, axis=0).round(3).tolist()}")
+    print(f"  Absolute roll limit (deg): +/-{ROLL_ABS_LIMIT_DEG:.1f}")
     print("  Capture flow: move -> settle -> record in collector -> press Enter here")
 
 if __name__ == "__main__":

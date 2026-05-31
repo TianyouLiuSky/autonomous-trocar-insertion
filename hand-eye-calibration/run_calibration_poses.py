@@ -31,9 +31,11 @@ ROLL_ABS_LIMIT_DEG = 28.0
 RETURN_TO_RPY_HOME_BEFORE_START = True
 RPY_HOME_DEG = [0.0, 0.0, 0.0]
 
-X_LIMITS_MM = (-60.0, 4.0)
-Y_LIMITS_MM = (-132.0, -84.0)
-Z_LIMITS_MM = (-107.0, -89.0)
+# Absolute robot workspace limits in FrameEE coordinates.
+# x positive: inward/forward, y positive: left, z positive: up.
+X_LIMITS_MM = (-42.0, 10.0)
+Y_LIMITS_MM = (-133.0, -85.0)
+Z_LIMITS_MM = (-13.0, 30.0)
 
 TRANSLATION_RADIUS_MM = 12.0
 Z_RADIUS_MM = 12.0

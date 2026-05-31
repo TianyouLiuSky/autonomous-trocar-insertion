@@ -20,12 +20,11 @@ HOME_DIR = Path(__file__).resolve().parent / "home_position"
 HOME_PATH = HOME_DIR / "home_position.json"
 MOTION_LOG_DIR = Path(__file__).resolve().parent / "motion_logs"
 MOTION_LOG_HZ = 10.0
-MOVE_TIMEOUT_SEC = 90.0
-# Hand-eye records the measured robot pose, so the commanded target does not
-# need sub-millimeter agreement. This tolerance prevents near-boundary poses
-# from waiting until timeout when the robot is already usable for capture.
-POSITION_TOL_MM = 4.0
-ORIENTATION_TOL_DEG = 1.0
+MOVE_TIMEOUT_SEC = 10.0
+# Keep pose acceptance tight so calibration samples preserve >5 deg rotation
+# diversity while still tolerating small robot readback noise.
+POSITION_TOL_MM = 0.5
+ORIENTATION_TOL_DEG = 0.2
 MAX_MOVE_ATTEMPTS = 2
 MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
@@ -38,18 +37,22 @@ RPY_HOME_DEG = [0.0, 0.0, 0.0]
 # x positive: inward/forward, y positive: left, z positive: up.
 X_LIMITS_MM = (-42.0, 10.0)
 Y_LIMITS_MM = (-133.0, -85.0)
-Z_LIMITS_MM = (-13.0, 30.0)
+Z_LIMITS_MM = (-13.0, 26.0)
 
 TRANSLATION_RADIUS_MM = 12.0
 Z_RADIUS_MM = 12.0
 ROLL_TARGETS_DEG = [-12.0, -6.0, 0.0, 6.0, 12.0]
 PITCH_OFFSETS_DEG = [-9.0, -3.0, 3.0, 9.0]
-QUIT_COMMANDS = {"Q", "QUIT", "q"}
-RECORD_ANYWAY_COMMAND = {"R", "r"}
+QUIT_COMMANDS = {"Q", "QUIT"}
+RECORD_ANYWAY_COMMANDS = {"R"}
 
 
 def is_quit_command(answer):
     return answer.strip().upper() in QUIT_COMMANDS
+
+
+def is_record_anyway_command(answer):
+    return answer.strip().upper() in RECORD_ANYWAY_COMMANDS
 
 
 def orientation_error_rotvec_deg(current_pose, target_pose):
@@ -444,10 +447,9 @@ def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
     print(f"Actual: {[round(v, 3) for v in actual_pose]}")
     print(f"Residual: position={pos_err:.3f} mm, orientation={ori_err:.3f} deg")
     answer = input("Press Enter to skip, type R to capture anyway, or type Q to stop: ")
-    answer = answer.strip().upper()
-    if answer in QUIT_COMMANDS:
+    if is_quit_command(answer):
         return "quit"
-    if answer == RECORD_ANYWAY_COMMAND:
+    if is_record_anyway_command(answer):
         return "record"
     return "skip"
 

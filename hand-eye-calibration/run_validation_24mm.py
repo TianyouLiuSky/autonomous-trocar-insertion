@@ -11,28 +11,32 @@ if str(MOTION_SCRIPT_DIR) not in sys.path:
 from SHER_Controller import SHERController
 
 HOME_PATH = Path(__file__).resolve().parent / "home_position" / "home_position.json"
-MOVE_TIMEOUT_SEC = 90.0
-# Validation records the measured robot pose, so the commanded target does not
-# need sub-millimeter agreement.
-POSITION_TOL_MM = 4.0
-ORIENTATION_TOL_DEG = 1.0
+MOVE_TIMEOUT_SEC = 10.0
+# Keep pose acceptance tight so validation samples reflect the intended
+# rotations while still tolerating small robot readback noise.
+POSITION_TOL_MM = 0.5
+ORIENTATION_TOL_DEG = 0.2
 MAX_MOVE_ATTEMPTS = 2
 MAX_LINEAR_VEL_MM_S = 5.0
 MAX_ANGULAR_VEL_RAD_S = 0.05
 SETTLE_SEC = 2.0
 ROLL_ABS_LIMIT_DEG = 28.0
-QUIT_COMMANDS = {"Q", "QUIT", "q"}
-RECORD_ANYWAY_COMMAND = {"R", "r"}
+QUIT_COMMANDS = {"Q", "QUIT"}
+RECORD_ANYWAY_COMMANDS = {"R"}
 
 # Absolute robot workspace limits in FrameEE coordinates.
 # x positive: inward/forward, y positive: left, z positive: up.
 X_LIMITS_MM = (-42.0, 10.0)
 Y_LIMITS_MM = (-133.0, -85.0)
-Z_LIMITS_MM = (-13.0, 30.0)
+Z_LIMITS_MM = (-13.0, 26.0)
 
 
 def is_quit_command(answer):
     return answer.strip().upper() in QUIT_COMMANDS
+
+
+def is_record_anyway_command(answer):
+    return answer.strip().upper() in RECORD_ANYWAY_COMMANDS
 
 
 def pose_error(current_pose, target_pose):
@@ -226,10 +230,9 @@ def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
     print(f"Actual: {[round(v, 3) for v in actual_pose]}")
     print(f"Residual: position={pos_err:.3f} mm, orientation={ori_err:.3f} deg")
     answer = input("Press Enter to skip, type R to capture anyway, or type Q to stop: ")
-    answer = answer.strip().upper()
-    if answer in QUIT_COMMANDS:
+    if is_quit_command(answer):
         return "quit"
-    if answer == RECORD_ANYWAY_COMMAND:
+    if is_record_anyway_command(answer):
         return "record"
     return "skip"
 

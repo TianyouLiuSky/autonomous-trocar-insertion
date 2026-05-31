@@ -78,13 +78,13 @@ same physical home position.
 
 The script then generates 20 poses inside the measured absolute robot workspace:
 
-- Workspace limits: `x [-42, 10] mm`, `y [-133, -85] mm`, `z [-13, 30] mm`
+- Workspace limits: `x [-42, 10] mm`, `y [-133, -85] mm`, `z [-13, 26] mm`
 - Desired XYZ span: up to `24 x 24 x 24 mm`, automatically compressed or shifted if needed
 - Absolute roll targets: `[-12, -6, 0, 6, 12] deg`
 - Pitch offsets: `[-9, -3, 3, 9] deg`
 - Neighboring orientation difference: at least `6 deg`
-- Move timeout: `90 s`
-- Reach tolerance: `4 mm` position, `1 deg` orientation
+- Move timeout: `10 s`
+- Reach tolerance: `0.5 mm` position, `0.2 deg` orientation
 - Max angular velocity: `0.05 rad/s`
 
 At each pose, wait for the motion terminal to say the pose is ready. Then:

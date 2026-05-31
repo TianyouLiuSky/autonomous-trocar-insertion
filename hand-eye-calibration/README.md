@@ -93,6 +93,11 @@ At each pose, wait for the motion terminal to say the pose is ready. Then:
 2. Confirm the sample count increased.
 3. Return to the motion terminal and press `Enter`, or type `Q` to stop after that sample.
 
+Do not record the home pose as a calibration sample before Pose 1. Use `Set
+Anchor` only for the visual reference. The diversity check compares each new
+sample against every already accepted sample, so a home sample near `[0, 0, 0]`
+can make later `[0, -3]` or `[0, +3]` poses fail the 5 degree threshold.
+
 If the motion script reports that a pose did not fully reach the target, skip it
 unless you have a clear reason to keep it. Type `R` to record anyway, or `Q` to
 stop the remaining pose run. Bad pose/image pairs are worse than having fewer
@@ -191,7 +196,8 @@ rs-enumerate-devices -c
 ```
 
 If the board is detected only partially, move the board or camera until the axes
-draw reliably. Avoid recording samples with unstable board detection.
+draw reliably. The GUI requires at least 8 ChArUco corners before estimating a
+pose. Avoid recording samples with unstable board detection.
 
 If calibration error is bad, first suspect bad sample pairing:
 

@@ -19,6 +19,7 @@ MARKER_LEN = 0.007
 DICT_ID = cv2.aruco.DICT_6X6_250
 N_SAMPLES = 20
 MIN_ROTATION_DEG = 5.0
+MIN_CORNERS = 8
 
 
 class RealSenseCamera:
@@ -50,10 +51,15 @@ class CharucoDetector:
 
     def detect_pose(self, image, K, dist):
         corners, ids, _, _ = self.detector.detectBoard(image)
-        if ids is None or len(ids) < 4:
+        if ids is None or len(ids) < MIN_CORNERS:
             return None, None, None
         obj_pts, img_pts = self.board.matchImagePoints(corners, ids)
-        success, rvec, tvec = cv2.solvePnP(obj_pts, img_pts, K, dist)
+        if obj_pts is None or len(obj_pts) < MIN_CORNERS:
+            return None, None, None
+        try:
+            success, rvec, tvec = cv2.solvePnP(obj_pts, img_pts, K, dist)
+        except cv2.error:
+            return None, None, None
         return (rvec, tvec, corners) if success else (None, None, None)
 
 
@@ -84,10 +90,10 @@ class SimultaneousCalibrator:
 
     def add_sample(self, robot_pose, board_rvec, board_tvec):
         R_board, _ = cv2.Rodrigues(board_rvec)
-        is_diverse, min_angle = self._check_diversity(R_board)
+        is_diverse, min_angle, closest_sample = self._check_diversity(R_board)
 
         if not is_diverse and len(self.robot_poses) > 0:
-            return False, min_angle
+            return False, min_angle, closest_sample
 
         self.robot_poses.append(robot_pose)
         self.board_rvecs.append(board_rvec)
@@ -110,17 +116,20 @@ class SimultaneousCalibrator:
         print(f"  Euler (deg):   [{euler_board[0]:7.2f}, {euler_board[1]:7.2f}, {euler_board[2]:7.2f}]")
         print(f"{'='*80}\n")
 
-        return True, min_angle
+        return True, min_angle, closest_sample
 
     def _check_diversity(self, R_new):
         if len(self.board_rvecs) == 0:
-            return True, 0.0
+            return True, 0.0, None
         min_angle = 180.0
-        for rvec in self.board_rvecs:
+        closest_sample = None
+        for i, rvec in enumerate(self.board_rvecs, start=1):
             R_existing, _ = cv2.Rodrigues(rvec)
             angle = np.degrees(np.arccos(np.clip((np.trace(R_existing.T @ R_new) - 1) / 2, -1, 1)))
-            min_angle = min(min_angle, angle)
-        return min_angle >= MIN_ROTATION_DEG, min_angle
+            if angle < min_angle:
+                min_angle = angle
+                closest_sample = i
+        return min_angle >= MIN_ROTATION_DEG, min_angle, closest_sample
 
     def can_calibrate(self):
         return len(self.robot_poses) >= N_SAMPLES
@@ -404,9 +413,12 @@ class CalibrationGUI(QtWidgets.QWidget):
             print("✗ Board not detected or robot not ready")
             return
         robot_pose = self.robot.get_pose()
-        success, angle = self.calibrator.add_sample(robot_pose, rvec, tvec)
+        success, angle, closest_sample = self.calibrator.add_sample(robot_pose, rvec, tvec)
         if not success:
-            print(f"✗ Too similar ({angle:.1f}° < {MIN_ROTATION_DEG}°)")
+            print(
+                f"✗ Too similar ({angle:.1f}° < {MIN_ROTATION_DEG}°) "
+                f"to accepted sample {closest_sample}"
+            )
 
     def compute_calibration(self):
         self.status.setText("Computing...")

@@ -40,13 +40,15 @@ ROBOT_NAME  = 'SHER20'
 ROBOT_TOPIC = '/{}/eye_robot/FrameEE'.format(ROBOT_NAME)
 
 CAMERA_W, CAMERA_H, CAMERA_FPS = 1280, 720, 15
+DISPLAY_W = 720
+DISPLAY_H = int(DISPLAY_W * float(CAMERA_H) / float(CAMERA_W))
 
 SQUARES_X   = 8
 SQUARES_Y   = 6
 SQUARE_LEN  = 0.010
 MARKER_LEN  = 0.007
 DICT_ID     = cv2.aruco.DICT_6X6_250
-MIN_CORNERS = 4
+MIN_CORNERS = 8
 N_SAMPLES = 20
 MIN_ROTATION_DEG = 5.0
 
@@ -166,7 +168,10 @@ class ChArUcoDetector(object):
         obj_pts, img_pts = self.board.matchImagePoints(corners, ids)
         if obj_pts is None or len(obj_pts) < MIN_CORNERS:
             return None, None, corners, ids
-        ok, rvec, tvec = cv2.solvePnP(obj_pts, img_pts, K, dist)
+        try:
+            ok, rvec, tvec = cv2.solvePnP(obj_pts, img_pts, K, dist)
+        except cv2.error:
+            return None, None, corners, ids
         return (rvec, tvec, corners, ids) if ok else (None, None, corners, ids)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -215,9 +220,9 @@ class HandEyeCalibrator(object):
 
     def add_sample(self, robot_pose, rvec, tvec, stamp=None):
         R_board, _ = cv2.Rodrigues(rvec)
-        is_diverse, min_angle = self._check_diversity(R_board)
+        is_diverse, min_angle, closest_sample = self._check_diversity(R_board)
         if not is_diverse and len(self.robot_poses) > 0:
-            return False, min_angle
+            return False, min_angle, closest_sample
 
         self.robot_poses.append(robot_pose)
         self.board_rvecs.append(rvec.copy())
@@ -249,19 +254,22 @@ class HandEyeCalibrator(object):
             'brd_pitch_deg': round(board_euler[1], 4),
             'brd_yaw_deg':   round(board_euler[2], 4),
         })
-        return True, min_angle
+        return True, min_angle, closest_sample
 
     def _check_diversity(self, R_new):
         if len(self.board_rvecs) == 0:
-            return True, 0.0
+            return True, 0.0, None
 
         min_angle = 180.0
-        for rvec in self.board_rvecs:
+        closest_sample = None
+        for i, rvec in enumerate(self.board_rvecs, start=1):
             R_existing, _ = cv2.Rodrigues(rvec)
             cos_angle = (np.trace(R_existing.T @ R_new) - 1) / 2
             angle = np.degrees(np.arccos(np.clip(cos_angle, -1, 1)))
-            min_angle = min(min_angle, angle)
-        return min_angle >= MIN_ROTATION_DEG, min_angle
+            if angle < min_angle:
+                min_angle = angle
+                closest_sample = i
+        return min_angle >= MIN_ROTATION_DEG, min_angle, closest_sample
         
     @property
     def n(self):
@@ -355,9 +363,9 @@ class MainWindow(QMainWindow):
         fl   = QVBoxLayout(feed); fl.setContentsMargins(4,10,4,4)
         self._img_lbl = QLabel()
         self._img_lbl.setAlignment(Qt.AlignCenter)
-        self._img_lbl.setFixedSize(720,480)
+        self._img_lbl.setFixedSize(DISPLAY_W, DISPLAY_H)
         self._img_lbl.setPixmap(_placeholder_px(
-            720, 480, "D405 direct: {}x{} @ {}fps".format(CAMERA_W, CAMERA_H, CAMERA_FPS)))
+            DISPLAY_W, DISPLAY_H, "D405 direct: {}x{} @ {}fps".format(CAMERA_W, CAMERA_H, CAMERA_FPS)))
         fl.addWidget(self._img_lbl)
         dr = QHBoxLayout()
         self._board_lbl   = _lbl("● board  NOT DETECTED","color:{};font-size:10px;".format(RED))
@@ -460,10 +468,14 @@ class MainWindow(QMainWindow):
             self._log_msg("x No robot pose"); return
 
         stamp = rospy.Time.now()
-        accepted, min_angle = self._cal.add_sample(rp, rvec, tvec, stamp)
+        accepted, min_angle, closest_sample = self._cal.add_sample(rp, rvec, tvec, stamp)
         if not accepted:
-            self._log_msg("x Too similar ({:.1f} deg < {:.1f} deg); move to a more different board pose".format(
-                min_angle, MIN_ROTATION_DEG))
+            self._log_msg(
+                "x Too similar ({:.1f} deg < {:.1f} deg) to accepted sample {}; "
+                "move to a more different board pose".format(
+                    min_angle, MIN_ROTATION_DEG, closest_sample
+                )
+            )
             return
 
         if self._cal.n == 1:
@@ -588,7 +600,7 @@ class MainWindow(QMainWindow):
                         self._board_lbl.setStyleSheet("color:{};font-size:10px;".format(RED))
                         self._partial_warned = False
             self._corners_lbl.setText("corners: {}".format(nc))
-            self._img_lbl.setPixmap(_bgr_to_pixmap(disp,720,480))
+            self._img_lbl.setPixmap(_bgr_to_pixmap(disp, DISPLAY_W, DISPLAY_H))
 
     def closeEvent(self, event):
         self._disp_timer.stop()

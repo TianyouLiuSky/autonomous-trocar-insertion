@@ -162,12 +162,29 @@ calibration.
 
 The validation set has 27 poses over a `24 x 24 x 24 mm` grid with smaller
 orientation variation. It is a holdout check, not the calibration solve itself.
+The collector saves:
+
+- `validation_dataset.npz`
+- `output/validation_dataset_*.npz`
+- `output/validation_samples_*.csv`
+
+The CSV includes robot pose, board pose, ChArUco corner count, and ChArUco
+reprojection error for every validation sample.
 
 After validation data is saved, evaluate:
 
 ```bash
-python3 evaluate_calibration.py
+python3 evaluate_calibration.py --no-show
 ```
+
+The evaluator defaults to the latest `output/hand_eye_cal_*.npz` calibration and
+`validation_dataset.npz`. It writes:
+
+- `output/validation_residuals_*.csv`
+- `output/spatial_error_map_*.png`
+
+Use `validation_residuals_*.csv` to sort by translation error, rotation error,
+corner count, or reprojection error.
 
 ## Generated Files
 
@@ -175,6 +192,7 @@ Generated files are ignored by `.gitignore`, including:
 
 - `output/*.npz`
 - `output/*.csv`
+- `output/validation_dataset_*.npz`
 - `validation_dataset.npz`
 - `hand_eye_calibration.npz`
 - `spatial_error_map_*.png`

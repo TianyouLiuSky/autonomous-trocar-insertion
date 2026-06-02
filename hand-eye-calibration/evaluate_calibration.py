@@ -3,12 +3,74 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 import cv2
 import argparse
+import csv
+import glob
+import os
 from datetime import datetime
 
-def evaluate_and_plot(calib_npz_path, validation_npz_path):
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_OUTPUT_DIR = os.path.join(SCRIPT_DIR, "output")
+
+
+def latest_file(pattern):
+    matches = glob.glob(pattern)
+    if not matches:
+        return None
+    return max(matches, key=os.path.getmtime)
+
+
+def resolve_path(path, fallback_patterns):
+    if path:
+        return path
+    for pattern in fallback_patterns:
+        resolved = latest_file(pattern)
+        if resolved:
+            return resolved
+    return None
+
+
+def as_float_or_blank(value):
+    if value is None:
+        return ""
+    if isinstance(value, float) and np.isnan(value):
+        return ""
+    return round(float(value), 6)
+
+
+def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=DEFAULT_OUTPUT_DIR, show_plot=True):
+    os.makedirs(output_dir, exist_ok=True)
+    calib_npz_path = resolve_path(
+        calib_npz_path,
+        [
+            os.path.join(DEFAULT_OUTPUT_DIR, "hand_eye_cal_*.npz"),
+            os.path.join(SCRIPT_DIR, "hand_eye_calibration.npz"),
+        ],
+    )
+    validation_npz_path = resolve_path(
+        validation_npz_path,
+        [
+            os.path.join(SCRIPT_DIR, "validation_dataset.npz"),
+            os.path.join(DEFAULT_OUTPUT_DIR, "validation_dataset_*.npz"),
+        ],
+    )
+    if calib_npz_path is None:
+        print("Failed to find a calibration .npz. Pass --calib explicitly.")
+        return None
+    if validation_npz_path is None:
+        print("Failed to find a validation .npz. Pass --validation explicitly.")
+        return None
+
     # 1. Load the Calibration Matrices you want to test
     try:
         calib_data = np.load(calib_npz_path)
+        if 'T_board2gripper' not in calib_data:
+            print(
+                "Calibration file does not contain T_board2gripper. "
+                "Use a calibration saved by handeye_calibration.py, not an older "
+                "T_cam2base-only file."
+            )
+            return None
         T_cam2base = calib_data['T_cam2base']           # Matrix X
         T_board2gripper = calib_data['T_board2gripper'] # Matrix Y
         print(f"Loaded Calibration: {calib_npz_path}")
@@ -22,6 +84,8 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
         robot_poses = val_data['robot_poses'] # Matrix A components
         board_rvecs = val_data['board_rvecs'] # Matrix B components
         board_tvecs = val_data['board_tvecs']
+        corner_counts = val_data['corner_counts'] if 'corner_counts' in val_data else None
+        reproj_errors = val_data['reprojection_errors_px'] if 'reprojection_errors_px' in val_data else None
         print(f"Loaded {len(robot_poses)} Ground Truth samples from: {validation_npz_path}")
     except Exception as e:
         print(f"Failed to load validation file: {e}")
@@ -29,9 +93,10 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
 
     coords, t_err_vecs, r_err_vecs = [], [], []
     t_mags, r_mags = [], []
+    residual_rows = []
 
     # 3. Compute Residuals for AY = XB
-    for r_pose, b_rvec, b_tvec in zip(robot_poses, board_rvecs, board_tvecs):
+    for i, (r_pose, b_rvec, b_tvec) in enumerate(zip(robot_poses, board_rvecs, board_tvecs), start=1):
         # Construct Matrix A (Robot Kinematics)
         T_A = np.eye(4)
         T_A[:3, :3] = Rotation.from_quat(r_pose['q']).as_matrix()
@@ -46,10 +111,12 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
         T_left = T_A @ T_board2gripper   # According to Kinematics (A * Y)
         T_right = T_cam2base @ T_B       # According to Vision (X * B)
 
-        coords.append(T_left[:3, 3] * 1000) # Save coordinates for plotting (in mm)
+        board_base_robot_mm = T_left[:3, 3] * 1000
+        board_base_camera_mm = T_right[:3, 3] * 1000
+        coords.append(board_base_robot_mm) # Save coordinates for plotting (in mm)
 
         # Translation Error
-        t_err = (T_right[:3, 3] - T_left[:3, 3]) * 1000 
+        t_err = board_base_camera_mm - board_base_robot_mm
         t_err_vecs.append(t_err)
         t_mags.append(np.linalg.norm(t_err))
 
@@ -61,6 +128,38 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
         r_err_vecs.append((rot_err_vec / (np.linalg.norm(rot_err_vec) + 1e-8)) * r_mag_deg) 
         r_mags.append(r_mag_deg)
 
+        robot_rpy = Rotation.from_quat(r_pose['q']).as_euler('xyz', degrees=True)
+        board_rot, _ = cv2.Rodrigues(b_rvec)
+        board_rpy = Rotation.from_matrix(board_rot).as_euler('xyz', degrees=True)
+        residual_rows.append({
+            "sample": i,
+            "translation_error_mm": round(float(np.linalg.norm(t_err)), 6),
+            "rotation_error_deg": round(float(r_mag_deg), 6),
+            "translation_error_x_mm": round(float(t_err[0]), 6),
+            "translation_error_y_mm": round(float(t_err[1]), 6),
+            "translation_error_z_mm": round(float(t_err[2]), 6),
+            "board_robot_x_mm": round(float(board_base_robot_mm[0]), 6),
+            "board_robot_y_mm": round(float(board_base_robot_mm[1]), 6),
+            "board_robot_z_mm": round(float(board_base_robot_mm[2]), 6),
+            "board_camera_x_mm": round(float(board_base_camera_mm[0]), 6),
+            "board_camera_y_mm": round(float(board_base_camera_mm[1]), 6),
+            "board_camera_z_mm": round(float(board_base_camera_mm[2]), 6),
+            "robot_x_mm": round(float(r_pose['t'][0] * 1000), 6),
+            "robot_y_mm": round(float(r_pose['t'][1] * 1000), 6),
+            "robot_z_mm": round(float(r_pose['t'][2] * 1000), 6),
+            "robot_roll_deg": round(float(robot_rpy[0]), 6),
+            "robot_pitch_deg": round(float(robot_rpy[1]), 6),
+            "robot_yaw_deg": round(float(robot_rpy[2]), 6),
+            "board_cam_x_m": round(float(b_tvec.flatten()[0]), 9),
+            "board_cam_y_m": round(float(b_tvec.flatten()[1]), 9),
+            "board_cam_z_m": round(float(b_tvec.flatten()[2]), 9),
+            "board_roll_deg": round(float(board_rpy[0]), 6),
+            "board_pitch_deg": round(float(board_rpy[1]), 6),
+            "board_yaw_deg": round(float(board_rpy[2]), 6),
+            "corner_count": "" if corner_counts is None else int(corner_counts[i - 1]),
+            "reprojection_error_px": "" if reproj_errors is None else as_float_or_blank(reproj_errors[i - 1]),
+        })
+
     coords = np.array(coords)
     t_err_vecs = np.array(t_err_vecs)
     r_err_vecs = np.array(r_err_vecs)
@@ -70,6 +169,30 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
     print(f"\n--- EVALUATION RESULTS ---")
     print(f"Mean Translation Error: {np.mean(t_mags):.3f} mm (Max: {np.max(t_mags):.3f} mm)")
     print(f"Mean Rotation Error:    {np.mean(r_mags):.3f} deg (Max: {np.max(r_mags):.3f} deg)")
+    if reproj_errors is not None:
+        print(
+            f"Mean ChArUco Reprojection Error: {np.mean(reproj_errors):.3f} px "
+            f"(Max: {np.max(reproj_errors):.3f} px)"
+        )
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    csv_path = os.path.join(output_dir, f"validation_residuals_{timestamp}.csv")
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(residual_rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(residual_rows)
+    print(f"\n✓ Saved per-sample residual CSV to: {csv_path}")
+
+    print("\nWorst translation residuals:")
+    for idx in np.argsort(t_mags)[-5:][::-1]:
+        print(
+            "  sample {:02d}: {:6.3f} mm, {:6.3f} deg, reproj={} px".format(
+                idx + 1,
+                t_mags[idx],
+                r_mags[idx],
+                "n/a" if reproj_errors is None else f"{float(reproj_errors[idx]):.3f}",
+            )
+        )
 
     # 4. Outlier Detection
     t_thresh, r_thresh = np.mean(t_mags) + np.std(t_mags), np.mean(r_mags) + np.std(r_mags)
@@ -112,15 +235,35 @@ def evaluate_and_plot(calib_npz_path, validation_npz_path):
 
     plt.tight_layout()
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
-    save_filename = f'spatial_error_map_{timestamp}.png'
+    save_filename = os.path.join(output_dir, f'spatial_error_map_{timestamp}.png')
     
     plt.savefig(save_filename, dpi=300, bbox_inches='tight')
     print(f"\n✓ Saved high-resolution plot to: {save_filename}")
 
-    plt.show()
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
+
+    return {
+        "mean_translation_error_mm": float(np.mean(t_mags)),
+        "max_translation_error_mm": float(np.max(t_mags)),
+        "mean_rotation_error_deg": float(np.mean(r_mags)),
+        "max_rotation_error_deg": float(np.max(r_mags)),
+        "residual_csv": csv_path,
+        "plot": save_filename,
+    }
 
 if __name__ == "__main__":
-    # You can change these filenames to test different calibrations against the same dataset
-    evaluate_and_plot(calib_npz_path='hand_eye_calibration.npz', 
-                            validation_npz_path='validation_dataset.npz')
+    parser = argparse.ArgumentParser(description="Evaluate hand-eye calibration against a validation dataset.")
+    parser.add_argument("--calib", default=None, help="Calibration .npz. Defaults to latest output/hand_eye_cal_*.npz.")
+    parser.add_argument("--validation", default=None, help="Validation .npz. Defaults to validation_dataset.npz.")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Directory for residual CSV and plot.")
+    parser.add_argument("--no-show", action="store_true", help="Save the plot without opening a Matplotlib window.")
+    args = parser.parse_args()
+    evaluate_and_plot(
+        calib_npz_path=args.calib,
+        validation_npz_path=args.validation,
+        output_dir=args.output_dir,
+        show_plot=not args.no_show,
+    )

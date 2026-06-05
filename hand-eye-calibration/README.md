@@ -202,7 +202,7 @@ Generated files are ignored by `.gitignore`, including:
 
 ## Troubleshooting
 
-If the GUI cannot see the camera, make sure no other process owns the D405 color
+If the GUI cannot see the camera, first make sure the camera is connected to the computer and no other process owns the D405 color
 stream. The GUI now opens the camera directly, so do not run the ROS D405 camera
 publisher or another direct RealSense script at the same time.
 

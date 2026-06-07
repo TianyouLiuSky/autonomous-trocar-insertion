@@ -78,11 +78,12 @@ same physical home position.
 
 The script then generates 20 poses inside the measured absolute robot workspace:
 
-- Workspace limits: `x [-42, 10] mm`, `y [-133, -85] mm`, `z [-13, 26] mm`
+- Workspace safety limits: `x [-40, 10] mm`, `y [-130, -85] mm`, `z [-13, 26] mm`
 - Desired XYZ span: up to `24 x 24 x 24 mm`, automatically compressed or shifted if needed
-- Absolute roll targets: `[-12, -6, 0, 6, 12] deg`
-- Pitch offsets: `[-9, -3, 3, 9] deg`
-- Neighboring orientation difference: at least `6 deg`
+- Spatial design: `10` XYZ anchors, each visited by `2` different orientations
+- Absolute roll targets: `[-16, -8, 0, 8, 16] deg`
+- Pitch offsets: `[-12, -4, 4, 12] deg`
+- Pairwise orientation difference: at least `8 deg`
 - Move timeout: `10 s`
 - Reach tolerance: `0.5 mm` position, `0.2 deg` orientation
 - Max angular velocity: `0.05 rad/s`
@@ -117,6 +118,35 @@ Use `calibration_motion_samples_*.csv` to inspect the live position and
 orientation residual during each attempted move. This is useful if the robot
 appears to stop rotating before reaching a target. Use
 `calibration_motion_summary_*.csv` for one final residual row per attempt.
+
+## Camera Repeatability Test
+
+To test D405/ChArUco repeatability independently of the calibration solve, move
+the robot to a safe pose where the entire board is visible, then leave the
+robot, board, and camera completely still. Do not run another process that owns
+the D405.
+
+Run:
+
+```bash
+python3 test_charuco_repeatability.py --samples 100 --label center
+```
+
+The script records the board pose every `0.2 s` and logs the latest
+`/SHER20/eye_robot/FrameEE` pose alongside it. It reports:
+
+- board-position XYZ standard deviation, peak-to-peak range, and radial jitter
+- board angular jitter
+- ChArUco reprojection error and corner count
+- FrameEE position and angular jitter
+
+It writes raw samples, a JSON summary, and an annotated final frame under
+`output/charuco_repeatability_*`.
+
+Run the test at the workspace center and at two or more representative edge
+poses. If FrameEE stays stable but board-pose jitter grows near an image edge,
+the vision side is implicated. If both change, investigate robot settling,
+mount rigidity, or external vibration first.
 
 ## Compute and Save
 

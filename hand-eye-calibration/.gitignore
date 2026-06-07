@@ -13,6 +13,8 @@ results*
 # Runtime motion/capture outputs
 output/*.npz
 output/*.csv
+output/*.json
+output/*.png
 data/*.csv
 home_position/*.json
 motion_logs/*.csv

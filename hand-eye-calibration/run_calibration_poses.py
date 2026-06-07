@@ -41,8 +41,10 @@ Z_LIMITS_MM = (-13.0, 26.0)
 
 TRANSLATION_RADIUS_MM = 12.0
 Z_RADIUS_MM = 12.0
-ROLL_TARGETS_DEG = [-12.0, -6.0, 0.0, 6.0, 12.0]
-PITCH_OFFSETS_DEG = [-9.0, -3.0, 3.0, 9.0]
+# Eight-degree spacing leaves margin above the GUI's five-degree diversity
+# threshold after robot settling and ChArUco pose-estimation noise.
+ROLL_TARGETS_DEG = [-16.0, -8.0, 0.0, 8.0, 16.0]
+PITCH_OFFSETS_DEG = [-12.0, -4.0, 4.0, 12.0]
 QUIT_COMMANDS = {"Q", "QUIT"}
 RECORD_ANYWAY_COMMANDS = {"R"}
 
@@ -307,47 +309,106 @@ def save_home_position(home_pose, measured_pose=None, pre_home_pose=None):
 
 def generate_diverse_poses(base_pose):
     """
-    Generate exactly 20 reachable hand-eye poses around the current pose.
+    Generate 20 poses with translation and orientation deliberately decoupled.
 
-    The grid uses 5 absolute roll targets x 4 pitch offsets. Roll is absolute
-    robot roll, not a relative offset from the starting pose. Neighboring
-    orientations are spaced by 6 degrees, so every adjacent case clears the 5
-    degree diversity requirement while also adding moderate XYZ translation
-    diversity.
+    Ten XYZ anchors are each visited twice. The two visits use complementary
+    orientations, while the execution order follows an eight-degree snake
+    through orientation space. This gives repeated positions under different
+    orientations without repeating an orientation, which would be rejected by
+    the GUI's global five-degree diversity requirement.
     """
-    x, y, z, r, p, _ = base_pose
+    x, y, z, _, p, _ = base_pose
 
     tr = TRANSLATION_RADIUS_MM
     zr = Z_RADIUS_MM
     x_offsets = fit_offsets_to_limits(
-        x,
-        np.linspace(-tr, tr, len(ROLL_TARGETS_DEG)),
-        X_LIMITS_MM,
-        "x",
+        x, np.array([-tr, 0.0, tr]), X_LIMITS_MM, "x"
     )
-    desired_y_offsets = np.linspace(-tr, tr, len(PITCH_OFFSETS_DEG))
-    y_offsets = fit_offsets_to_limits(y, desired_y_offsets, Y_LIMITS_MM, "y")
+    y_offsets = fit_offsets_to_limits(
+        y, np.array([-tr, 0.0, tr]), Y_LIMITS_MM, "y"
+    )
     z_offsets = fit_offsets_to_limits(z, np.array([-zr, zr]), Z_LIMITS_MM, "z")
 
-    poses = []
-    for pitch_index, (dp, dy) in enumerate(zip(PITCH_OFFSETS_DEG, y_offsets)):
-        roll_order = list(zip(ROLL_TARGETS_DEG, x_offsets))
+    # Ten spatial anchors spanning the available 24 mm volume. Each anchor is
+    # reused by a complementary orientation pair.
+    anchors = [
+        (x_offsets[0], y_offsets[0], z_offsets[0]),
+        (x_offsets[1], y_offsets[0], z_offsets[1]),
+        (x_offsets[2], y_offsets[0], z_offsets[0]),
+        (x_offsets[0], y_offsets[1], z_offsets[1]),
+        (x_offsets[1], y_offsets[1], z_offsets[0]),
+        (x_offsets[2], y_offsets[1], z_offsets[1]),
+        (x_offsets[0], y_offsets[2], z_offsets[0]),
+        (x_offsets[1], y_offsets[2], z_offsets[1]),
+        (x_offsets[2], y_offsets[2], z_offsets[0]),
+        (x_offsets[1], y_offsets[1], z_offsets[1]),
+    ]
+
+    orientations = []
+    for pitch_index, pitch_offset in enumerate(PITCH_OFFSETS_DEG):
+        roll_order = list(ROLL_TARGETS_DEG)
         if pitch_index % 2 == 1:
             roll_order.reverse()
+        for roll_abs in roll_order:
+            orientations.append((roll_abs, pitch_offset))
 
-        for roll_index, (roll_abs, dx) in enumerate(roll_order):
-            if not roll_within_limit(roll_abs):
-                raise ValueError(
-                    f"Roll target {roll_abs:.3f} deg exceeds absolute limit "
-                    f"+/-{ROLL_ABS_LIMIT_DEG:.1f} deg"
-                )
-            dz = z_offsets[0] if (pitch_index + roll_index) % 2 == 0 else z_offsets[1]
-            target = [x + dx, y + dy, z + dz, roll_abs, p + dp, 0.0]
-            validate_target_pose(target, label=f"generated pose {len(poses) + 1}")
-            poses.append({
-                "label": f"r{roll_abs:+.0f}_p{dp:+.0f}",
+    # Assign complementary orientations (r, p) and (-r, -p) to the same XYZ
+    # anchor. The permutation prevents anchor index from tracking roll/pitch.
+    anchor_permutation = [0, 6, 3, 9, 1, 7, 4, 2, 8, 5]
+    pair_to_anchor = {}
+    next_pair_index = 0
+    for roll_abs, pitch_offset in orientations:
+        pair_key = tuple(
+            sorted(
+                [
+                    (float(roll_abs), float(pitch_offset)),
+                    (float(-roll_abs), float(-pitch_offset)),
+                ]
+            )
+        )
+        if pair_key not in pair_to_anchor:
+            pair_to_anchor[pair_key] = anchor_permutation[next_pair_index]
+            next_pair_index += 1
+
+    poses = []
+    for roll_abs, pitch_offset in orientations:
+        if not roll_within_limit(roll_abs):
+            raise ValueError(
+                f"Roll target {roll_abs:.3f} deg exceeds absolute limit "
+                f"+/-{ROLL_ABS_LIMIT_DEG:.1f} deg"
+            )
+
+        pair_key = tuple(
+            sorted(
+                [
+                    (float(roll_abs), float(pitch_offset)),
+                    (float(-roll_abs), float(-pitch_offset)),
+                ]
+            )
+        )
+        anchor_index = pair_to_anchor[pair_key]
+        dx, dy, dz = anchors[anchor_index]
+        target = [
+            x + dx,
+            y + dy,
+            z + dz,
+            roll_abs,
+            p + pitch_offset,
+            0.0,
+        ]
+        validate_target_pose(target, label=f"generated pose {len(poses) + 1}")
+        poses.append(
+            {
+                "label": (
+                    f"a{anchor_index + 1:02d}_"
+                    f"r{roll_abs:+.0f}_p{pitch_offset:+.0f}"
+                ),
                 "target": target,
-            })
+            }
+        )
+
+    if len(poses) != 20 or len(pair_to_anchor) != 10:
+        raise RuntimeError("Internal pose design error: expected 20 poses at 10 anchors")
 
     return poses
 
@@ -457,9 +518,20 @@ def ask_accept_failed_pose(index, total, target, actual_pose, pos_err, ori_err):
 def summarize_sequence(targets):
     xyz = np.array([p["target"][:3] for p in targets])
     rpy = np.array([p["target"][3:] for p in targets])
+    unique_xyz, xyz_counts = np.unique(np.round(xyz, 6), axis=0, return_counts=True)
+    rotations = R.from_euler("xyz", rpy, degrees=True)
+    pairwise_rotation_deg = []
+    for i in range(len(rotations)):
+        for j in range(i + 1, len(rotations)):
+            relative = rotations[j] * rotations[i].inv()
+            pairwise_rotation_deg.append(
+                np.linalg.norm(relative.as_rotvec()) * 180.0 / np.pi
+            )
     print("")
     print("Calibration pose sequence")
     print(f"  Poses: {len(targets)}")
+    print(f"  Unique XYZ anchors: {len(unique_xyz)}")
+    print(f"  Visits per XYZ anchor: {sorted(xyz_counts.tolist())}")
     print(f"  XYZ span (mm): {np.ptp(xyz, axis=0).round(3).tolist()}")
     print(f"  XYZ min (mm): {np.min(xyz, axis=0).round(3).tolist()}")
     print(f"  XYZ max (mm): {np.max(xyz, axis=0).round(3).tolist()}")
@@ -472,6 +544,10 @@ def summarize_sequence(targets):
     print(f"  RPY span (deg): {np.ptp(rpy, axis=0).round(3).tolist()}")
     print(f"  RPY min (deg): {np.min(rpy, axis=0).round(3).tolist()}")
     print(f"  RPY max (deg): {np.max(rpy, axis=0).round(3).tolist()}")
+    print(
+        "  Minimum pairwise orientation difference (deg): "
+        f"{min(pairwise_rotation_deg):.3f}"
+    )
     max_abs_roll = np.max(np.abs(rpy[:, 0]))
     print(f"  Absolute roll limit (deg): +/-{ROLL_ABS_LIMIT_DEG:.1f}")
     if max_abs_roll > ROLL_ABS_LIMIT_DEG:

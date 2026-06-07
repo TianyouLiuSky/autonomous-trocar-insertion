@@ -52,6 +52,16 @@ MIN_CORNERS = 8
 N_SAMPLES = 20
 MIN_ROTATION_DEG = 5.0
 
+# Residuals are normalized before optimization. By default, a 0.5 degree
+# rotation error and a 1.0 mm translation error have equal influence. Increase
+# a scale to reduce that component's influence. Environment overrides make
+# weight experiments possible without editing this file.
+SOLVER_PROFILE = 'translation_priority_v1'
+SOLVER_ROTATION_SCALE_DEG = float(
+    os.environ.get('HE_SOLVER_ROTATION_SCALE_DEG', '0.5'))
+SOLVER_TRANSLATION_SCALE_MM = float(
+    os.environ.get('HE_SOLVER_TRANSLATION_SCALE_MM', '1.0'))
+
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
 
@@ -278,33 +288,117 @@ class HandEyeCalibrator(object):
     def can_calibrate(self):
         return self.n >= N_SAMPLES
 
+    @staticmethod
+    def _unpack_solution(x):
+        RY = Rotation.from_rotvec(x[0:3]).as_matrix()
+        tY = x[3:6].reshape(3, 1)
+        RX = Rotation.from_rotvec(x[6:9]).as_matrix()
+        tX = x[9:12].reshape(3, 1)
+        return RY, tY, RX, tX
+
+    def _equation_terms(self, x):
+        RY, tY, RX, tX = self._unpack_solution(x)
+        for rp, rv, tv in zip(
+                self.robot_poses, self.board_rvecs, self.board_tvecs):
+            RA = Rotation.from_quat(rp['q']).as_matrix()
+            tA = rp['t'].reshape(3, 1)
+            RB, _ = cv2.Rodrigues(rv)
+            tB = tv.reshape(3, 1)
+            yield RA @ RY, RA @ tY + tA, RX @ RB, RX @ tB + tX
+
+    def _legacy_residual(self, x):
+        residuals = []
+        for R_left, t_left, R_right, t_right in self._equation_terms(x):
+            residuals.extend((R_left - R_right).flatten())
+            residuals.extend((t_left - t_right).flatten())
+        return np.asarray(residuals)
+
+    def _weighted_residual(self, x):
+        rotation_scale_rad = np.deg2rad(SOLVER_ROTATION_SCALE_DEG)
+        translation_scale_m = SOLVER_TRANSLATION_SCALE_MM * 0.001
+        residuals = []
+        for R_left, t_left, R_right, t_right in self._equation_terms(x):
+            R_error = R_right.T @ R_left
+            rotation_error = Rotation.from_matrix(R_error).as_rotvec()
+            translation_error = (t_left - t_right).flatten()
+            residuals.extend(rotation_error / rotation_scale_rad)
+            residuals.extend(translation_error / translation_scale_m)
+        return np.asarray(residuals)
+
+    def _solution_diagnostics(self, x):
+        translation_errors_mm = []
+        rotation_errors_deg = []
+        for R_left, t_left, R_right, t_right in self._equation_terms(x):
+            translation_errors_mm.append(
+                np.linalg.norm(t_left - t_right) * 1000.0)
+            R_error = R_right.T @ R_left
+            rotation_errors_deg.append(
+                np.linalg.norm(Rotation.from_matrix(R_error).as_rotvec())
+                * 180.0 / np.pi)
+        return {
+            'translation_mean_mm': float(np.mean(translation_errors_mm)),
+            'translation_max_mm': float(np.max(translation_errors_mm)),
+            'rotation_mean_deg': float(np.mean(rotation_errors_deg)),
+            'rotation_max_deg': float(np.max(rotation_errors_deg)),
+        }
+
+    @staticmethod
+    def _matrices_from_solution(x):
+        RY, tY, RX, tX = HandEyeCalibrator._unpack_solution(x)
+        Tc = np.eye(4)
+        Tc[:3, :3] = RX
+        Tc[:3, 3] = tX.flatten()
+        Tb = np.eye(4)
+        Tb[:3, :3] = RY
+        Tb[:3, 3] = tY.flatten()
+        return Tc, Tb
+
     def calibrate(self):
         if not self.can_calibrate():
             return None
         x0 = np.zeros(12)
-        def res(x):
-            RY=Rotation.from_rotvec(x[0:3]).as_matrix(); tY=x[3:6].reshape(3,1)
-            RX=Rotation.from_rotvec(x[6:9]).as_matrix(); tX=x[9:12].reshape(3,1)
-            r=[]
-            for rp,rv,tv in zip(self.robot_poses,self.board_rvecs,self.board_tvecs):
-                RA=Rotation.from_quat(rp['q']).as_matrix(); tA=rp['t'].reshape(3,1)
-                RB,_=cv2.Rodrigues(rv); tB=tv.reshape(3,1)
-                r.extend((RA@RY-RX@RB).flatten())
-                r.extend((RA@tY+tA-RX@tB-tX).flatten())
-            return np.array(r)
-        sol = least_squares(res, x0, ftol=1e-9, xtol=1e-9, max_nfev=2000)
-        if not sol.success:
+
+        # First reproduce the old solution. It provides a stable initialization
+        # and a direct same-dataset baseline for the weighting experiment.
+        legacy_sol = least_squares(
+            self._legacy_residual, x0, ftol=1e-9, xtol=1e-9,
+            gtol=1e-9, max_nfev=2000)
+        if not legacy_sol.success:
             return None
-        RY=Rotation.from_rotvec(sol.x[0:3]).as_matrix(); tY=sol.x[3:6].reshape(3,1)
-        RX=Rotation.from_rotvec(sol.x[6:9]).as_matrix(); tX=sol.x[9:12].reshape(3,1)
-        errs=[]
-        for rp,rv,tv in zip(self.robot_poses,self.board_rvecs,self.board_tvecs):
-            RA=Rotation.from_quat(rp['q']).as_matrix(); tA=rp['t'].reshape(3,1)
-            RB,_=cv2.Rodrigues(rv); tB=tv.reshape(3,1)
-            errs.append(np.linalg.norm(RA@tY+tA-RX@tB-tX))
-        Tc=np.eye(4); Tc[:3,:3]=RX; Tc[:3,3]=tX.flatten()
-        Tb=np.eye(4); Tb[:3,:3]=RY; Tb[:3,3]=tY.flatten()
-        return {'T_cam2base':Tc,'T_board2gripper':Tb,'err_mm':np.mean(errs)*1000,'n':self.n}
+
+        weighted_sol = least_squares(
+            self._weighted_residual, legacy_sol.x, ftol=1e-9, xtol=1e-9,
+            gtol=1e-9, x_scale='jac', max_nfev=4000)
+        if not weighted_sol.success:
+            return None
+
+        Tc, Tb = self._matrices_from_solution(weighted_sol.x)
+        legacy_Tc, legacy_Tb = self._matrices_from_solution(legacy_sol.x)
+        metrics = self._solution_diagnostics(weighted_sol.x)
+        legacy_metrics = self._solution_diagnostics(legacy_sol.x)
+        return {
+            'T_cam2base': Tc,
+            'T_board2gripper': Tb,
+            'legacy_T_cam2base': legacy_Tc,
+            'legacy_T_board2gripper': legacy_Tb,
+            'err_mm': metrics['translation_mean_mm'],
+            'translation_err_mean_mm': metrics['translation_mean_mm'],
+            'translation_err_max_mm': metrics['translation_max_mm'],
+            'rotation_err_mean_deg': metrics['rotation_mean_deg'],
+            'rotation_err_max_deg': metrics['rotation_max_deg'],
+            'legacy_translation_err_mean_mm':
+                legacy_metrics['translation_mean_mm'],
+            'legacy_translation_err_max_mm':
+                legacy_metrics['translation_max_mm'],
+            'legacy_rotation_err_mean_deg':
+                legacy_metrics['rotation_mean_deg'],
+            'legacy_rotation_err_max_deg':
+                legacy_metrics['rotation_max_deg'],
+            'solver_profile': SOLVER_PROFILE,
+            'solver_rotation_scale_deg': SOLVER_ROTATION_SCALE_DEG,
+            'solver_translation_scale_mm': SOLVER_TRANSLATION_SCALE_MM,
+            'n': self.n,
+        }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main Window
@@ -508,9 +602,30 @@ class MainWindow(QMainWindow):
             self._err_lbl.setStyleSheet("color:{};font-size:11px;".format(RED)); return
         self._result = r
         col = GREEN if r['err_mm']<1.0 else AMBER if r['err_mm']<3.0 else RED
-        self._err_lbl.setText("Mean error: {:.3f} mm  |  {} samples".format(r['err_mm'],r['n']))
+        self._err_lbl.setText(
+            "Weighted: t={:.3f} mm, r={:.3f} deg  |  {} samples".format(
+                r['translation_err_mean_mm'],
+                r['rotation_err_mean_deg'],
+                r['n']))
         self._err_lbl.setStyleSheet("color:{};font-size:11px;".format(col))
-        self._log_msg("Done — err={:.3f}mm  n={}".format(r['err_mm'],r['n']))
+        self._log_msg(
+            "Weighted ({}, {:.2f}deg={:.1f}mm): "
+            "t mean/max={:.3f}/{:.3f}mm, "
+            "r mean/max={:.3f}/{:.3f}deg".format(
+                r['solver_profile'],
+                r['solver_rotation_scale_deg'],
+                r['solver_translation_scale_mm'],
+                r['translation_err_mean_mm'],
+                r['translation_err_max_mm'],
+                r['rotation_err_mean_deg'],
+                r['rotation_err_max_deg']))
+        self._log_msg(
+            "Legacy same samples: t mean/max={:.3f}/{:.3f}mm, "
+            "r mean/max={:.3f}/{:.3f}deg".format(
+                r['legacy_translation_err_mean_mm'],
+                r['legacy_translation_err_max_mm'],
+                r['legacy_rotation_err_mean_deg'],
+                r['legacy_rotation_err_max_deg']))
         self._btn_save.setEnabled(True)
 
     def _save(self):
@@ -520,8 +635,28 @@ class MainWindow(QMainWindow):
         np.savez(path,
                  T_cam2base=self._result['T_cam2base'],
                  T_board2gripper=self._result['T_board2gripper'],
+                 legacy_T_cam2base=self._result['legacy_T_cam2base'],
+                 legacy_T_board2gripper=self._result['legacy_T_board2gripper'],
                  camera_matrix=self._cam.K, dist_coeffs=self._cam.dist,
-                 err_mm=self._result['err_mm'], n_samples=self._result['n'])
+                 err_mm=self._result['err_mm'],
+                 translation_err_mean_mm=self._result['translation_err_mean_mm'],
+                 translation_err_max_mm=self._result['translation_err_max_mm'],
+                 rotation_err_mean_deg=self._result['rotation_err_mean_deg'],
+                 rotation_err_max_deg=self._result['rotation_err_max_deg'],
+                 legacy_translation_err_mean_mm=
+                     self._result['legacy_translation_err_mean_mm'],
+                 legacy_translation_err_max_mm=
+                     self._result['legacy_translation_err_max_mm'],
+                 legacy_rotation_err_mean_deg=
+                     self._result['legacy_rotation_err_mean_deg'],
+                 legacy_rotation_err_max_deg=
+                     self._result['legacy_rotation_err_max_deg'],
+                 solver_profile=self._result['solver_profile'],
+                 solver_rotation_scale_deg=
+                     self._result['solver_rotation_scale_deg'],
+                 solver_translation_scale_mm=
+                     self._result['solver_translation_scale_mm'],
+                 n_samples=self._result['n'])
         self._log_msg("v Saved -> {}".format(path))
         self._err_lbl.setText("v Saved: {}".format(os.path.basename(path)))
 

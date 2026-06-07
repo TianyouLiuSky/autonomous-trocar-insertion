@@ -38,7 +38,9 @@ def as_float_or_blank(value):
     return round(float(value), 6)
 
 
-def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=DEFAULT_OUTPUT_DIR, show_plot=True):
+def evaluate_and_plot(
+        calib_npz_path=None, validation_npz_path=None,
+        output_dir=DEFAULT_OUTPUT_DIR, show_plot=True, solution="weighted"):
     os.makedirs(output_dir, exist_ok=True)
     calib_npz_path = resolve_path(
         calib_npz_path,
@@ -64,16 +66,23 @@ def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=
     # 1. Load the Calibration Matrices you want to test
     try:
         calib_data = np.load(calib_npz_path)
-        if 'T_board2gripper' not in calib_data:
+        if solution == "legacy":
+            camera_key = "legacy_T_cam2base"
+            board_key = "legacy_T_board2gripper"
+        else:
+            camera_key = "T_cam2base"
+            board_key = "T_board2gripper"
+
+        if camera_key not in calib_data or board_key not in calib_data:
             print(
-                "Calibration file does not contain T_board2gripper. "
-                "Use a calibration saved by handeye_calibration.py, not an older "
-                "T_cam2base-only file."
+                "Calibration file does not contain the {} solution. "
+                "Use a new calibration saved by the weighted "
+                "handeye_calibration.py.".format(solution)
             )
             return None
-        T_cam2base = calib_data['T_cam2base']           # Matrix X
-        T_board2gripper = calib_data['T_board2gripper'] # Matrix Y
-        print(f"Loaded Calibration: {calib_npz_path}")
+        T_cam2base = calib_data[camera_key]           # Matrix X
+        T_board2gripper = calib_data[board_key]       # Matrix Y
+        print(f"Loaded {solution} calibration: {calib_npz_path}")
     except Exception as e:
         print(f"Failed to load calibration file: {e}")
         return
@@ -166,7 +175,7 @@ def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=
     t_mags = np.array(t_mags)
     r_mags = np.array(r_mags)
 
-    print(f"\n--- EVALUATION RESULTS ---")
+    print(f"\n--- {solution.upper()} EVALUATION RESULTS ---")
     print(f"Mean Translation Error: {np.mean(t_mags):.3f} mm (Max: {np.max(t_mags):.3f} mm)")
     print(f"Mean Rotation Error:    {np.mean(r_mags):.3f} deg (Max: {np.max(r_mags):.3f} deg)")
     if reproj_errors is not None:
@@ -176,7 +185,8 @@ def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=
         )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_path = os.path.join(output_dir, f"validation_residuals_{timestamp}.csv")
+    csv_path = os.path.join(
+        output_dir, f"validation_residuals_{solution}_{timestamp}.csv")
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(residual_rows[0].keys()))
         writer.writeheader()
@@ -235,7 +245,8 @@ def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=
 
     plt.tight_layout()
 
-    save_filename = os.path.join(output_dir, f'spatial_error_map_{timestamp}.png')
+    save_filename = os.path.join(
+        output_dir, f'spatial_error_map_{solution}_{timestamp}.png')
     
     plt.savefig(save_filename, dpi=300, bbox_inches='tight')
     print(f"\n✓ Saved high-resolution plot to: {save_filename}")
@@ -250,6 +261,7 @@ def evaluate_and_plot(calib_npz_path=None, validation_npz_path=None, output_dir=
         "max_translation_error_mm": float(np.max(t_mags)),
         "mean_rotation_error_deg": float(np.mean(r_mags)),
         "max_rotation_error_deg": float(np.max(r_mags)),
+        "solution": solution,
         "residual_csv": csv_path,
         "plot": save_filename,
     }
@@ -259,6 +271,9 @@ if __name__ == "__main__":
     parser.add_argument("--calib", default=None, help="Calibration .npz. Defaults to latest output/hand_eye_cal_*.npz.")
     parser.add_argument("--validation", default=None, help="Validation .npz. Defaults to validation_dataset.npz.")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Directory for residual CSV and plot.")
+    parser.add_argument(
+        "--solution", choices=("weighted", "legacy"), default="weighted",
+        help="Which solution stored in the calibration .npz to validate.")
     parser.add_argument("--no-show", action="store_true", help="Save the plot without opening a Matplotlib window.")
     args = parser.parse_args()
     evaluate_and_plot(
@@ -266,4 +281,5 @@ if __name__ == "__main__":
         validation_npz_path=args.validation,
         output_dir=args.output_dir,
         show_plot=not args.no_show,
+        solution=args.solution,
     )

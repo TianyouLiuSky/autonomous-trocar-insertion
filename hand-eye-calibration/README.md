@@ -168,6 +168,16 @@ The pose log can also be saved as CSV with `Save Poses (.csv)`.
 
 ## Validation
 
+For the recommended decoupled spatial and orientation tests, use:
+
+```text
+DECOUPLED_VALIDATION_README.md
+```
+
+The older `run_validation_24mm.py` sequence below changes XYZ and roll/pitch
+together. Keep it only for reproducing earlier combined-validation experiments;
+do not use it to diagnose whether an error is caused by position or orientation.
+
 To collect validation data, run the validation collector GUI first:
 
 ```bash

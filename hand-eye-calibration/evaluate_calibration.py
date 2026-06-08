@@ -95,12 +95,19 @@ def evaluate_and_plot(
         board_tvecs = val_data['board_tvecs']
         corner_counts = val_data['corner_counts'] if 'corner_counts' in val_data else None
         reproj_errors = val_data['reprojection_errors_px'] if 'reprojection_errors_px' in val_data else None
+        validation_mode = (
+            str(val_data['validation_mode'].item())
+            if 'validation_mode' in val_data
+            else 'validation'
+        )
         print(f"Loaded {len(robot_poses)} Ground Truth samples from: {validation_npz_path}")
+        print(f"Validation mode: {validation_mode}")
     except Exception as e:
         print(f"Failed to load validation file: {e}")
         return
 
     coords, t_err_vecs, r_err_vecs = [], [], []
+    robot_rpys = []
     t_mags, r_mags = [], []
     residual_rows = []
 
@@ -138,6 +145,7 @@ def evaluate_and_plot(
         r_mags.append(r_mag_deg)
 
         robot_rpy = Rotation.from_quat(r_pose['q']).as_euler('xyz', degrees=True)
+        robot_rpys.append(robot_rpy)
         board_rot, _ = cv2.Rodrigues(b_rvec)
         board_rpy = Rotation.from_matrix(board_rot).as_euler('xyz', degrees=True)
         residual_rows.append({
@@ -172,6 +180,7 @@ def evaluate_and_plot(
     coords = np.array(coords)
     t_err_vecs = np.array(t_err_vecs)
     r_err_vecs = np.array(r_err_vecs)
+    robot_rpys = np.array(robot_rpys)
     t_mags = np.array(t_mags)
     r_mags = np.array(r_mags)
 
@@ -185,8 +194,13 @@ def evaluate_and_plot(
         )
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    artifact_tag = (
+        solution
+        if validation_mode == "validation"
+        else f"{solution}_{validation_mode}"
+    )
     csv_path = os.path.join(
-        output_dir, f"validation_residuals_{solution}_{timestamp}.csv")
+        output_dir, f"validation_residuals_{artifact_tag}_{timestamp}.csv")
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(residual_rows[0].keys()))
         writer.writeheader()
@@ -211,42 +225,74 @@ def evaluate_and_plot(
 
     # 5. Create Plots
     fig = plt.figure(figsize=(18, 8))
+    if validation_mode == "orientation":
+        roll = robot_rpys[:, 0]
+        pitch = robot_rpys[:, 1]
 
-    # --- PLOT 1: Rotation Error ---
-    ax1 = fig.add_subplot(121, projection='3d')
-    sc1 = ax1.scatter(coords[:,0], coords[:,1], coords[:,2], c=r_mags, cmap='viridis', s=10)
-    ax1.quiver(coords[:,0], coords[:,1], coords[:,2], r_err_vecs[:,0], r_err_vecs[:,1], r_err_vecs[:,2], 
-               length=1.0, color='midnightblue', alpha=0.6)
-    
-    ax1.scatter(coords[0,0], coords[0,1], coords[0,2], c='red', marker='*', s=100, label='Start Point')
-    ax1.scatter(coords[max_r_idx,0], coords[max_r_idx,1], coords[max_r_idx,2], c='yellow', marker='*', s=150, edgecolors='black', label='Max Error Point')
-    ax1.scatter(coords[r_outliers,0], coords[r_outliers,1], coords[r_outliers,2], facecolors='none', edgecolors='red', s=80, linewidths=1.5, label='>1std outlier')
-    
-    ax1.set_title('Spatial Rotation Error Map (deg)')
-    ax1.set_xlabel('X (mm)'), ax1.set_ylabel('Y (mm)'), ax1.set_zlabel('Z (mm)')
-    ax1.legend()
-    fig.colorbar(sc1, ax=ax1, label='Error (deg)', shrink=0.7)
+        ax1 = fig.add_subplot(121)
+        sc1 = ax1.scatter(roll, pitch, c=r_mags, cmap='viridis', s=45)
+        ax1.scatter(roll[0], pitch[0], c='red', marker='*', s=120, label='Start Point')
+        ax1.scatter(roll[max_r_idx], pitch[max_r_idx], c='yellow', marker='*', s=160, edgecolors='black', label='Max Error Point')
+        ax1.scatter(roll[r_outliers], pitch[r_outliers], facecolors='none', edgecolors='red', s=90, linewidths=1.5, label='>1std outlier')
+        ax1.set_title('Orientation Sweep Rotation Error (deg)')
+        ax1.set_xlabel('Robot roll (deg)')
+        ax1.set_ylabel('Robot pitch (deg)')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+        fig.colorbar(sc1, ax=ax1, label='Error (deg)', shrink=0.7)
 
-    # --- PLOT 2: Translation Error ---
-    ax2 = fig.add_subplot(122, projection='3d')
-    sc2 = ax2.scatter(coords[:,0], coords[:,1], coords[:,2], c=t_mags, cmap='viridis', s=10)
-    
-    ax2.quiver(coords[:,0], coords[:,1], coords[:,2], t_err_vecs[:,0], t_err_vecs[:,1], t_err_vecs[:,2], 
-               length=1.0, color='midnightblue', alpha=0.6) 
-    
-    ax2.scatter(coords[0,0], coords[0,1], coords[0,2], c='red', marker='*', s=100, label='Start Point')
-    ax2.scatter(coords[max_t_idx,0], coords[max_t_idx,1], coords[max_t_idx,2], c='yellow', marker='*', s=150, edgecolors='black', label='Max Error Point')
-    ax2.scatter(coords[t_outliers,0], coords[t_outliers,1], coords[t_outliers,2], facecolors='none', edgecolors='red', s=80, linewidths=1.5, label='>1std outlier')
+        ax2 = fig.add_subplot(122)
+        sc2 = ax2.scatter(roll, pitch, c=t_mags, cmap='viridis', s=45)
+        ax2.scatter(roll[0], pitch[0], c='red', marker='*', s=120, label='Start Point')
+        ax2.scatter(roll[max_t_idx], pitch[max_t_idx], c='yellow', marker='*', s=160, edgecolors='black', label='Max Error Point')
+        ax2.scatter(roll[t_outliers], pitch[t_outliers], facecolors='none', edgecolors='red', s=90, linewidths=1.5, label='>1std outlier')
+        ax2.set_title('Orientation Sweep Translation Error (mm)')
+        ax2.set_xlabel('Robot roll (deg)')
+        ax2.set_ylabel('Robot pitch (deg)')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+        fig.colorbar(sc2, ax=ax2, label='Error (mm)', shrink=0.7)
+    else:
+        # --- PLOT 1: Rotation Error ---
+        ax1 = fig.add_subplot(121, projection='3d')
+        sc1 = ax1.scatter(coords[:,0], coords[:,1], coords[:,2], c=r_mags, cmap='viridis', s=10)
+        ax1.quiver(coords[:,0], coords[:,1], coords[:,2], r_err_vecs[:,0], r_err_vecs[:,1], r_err_vecs[:,2],
+                   length=1.0, color='midnightblue', alpha=0.6)
 
-    ax2.set_title('Spatial Translation Error Map (mm)')
-    ax2.set_xlabel('X (mm)'), ax2.set_ylabel('Y (mm)'), ax2.set_zlabel('Z (mm)')
-    ax2.legend()
-    fig.colorbar(sc2, ax=ax2, label='Error (mm)', shrink=0.7)
+        ax1.scatter(coords[0,0], coords[0,1], coords[0,2], c='red', marker='*', s=100, label='Start Point')
+        ax1.scatter(coords[max_r_idx,0], coords[max_r_idx,1], coords[max_r_idx,2], c='yellow', marker='*', s=150, edgecolors='black', label='Max Error Point')
+        ax1.scatter(coords[r_outliers,0], coords[r_outliers,1], coords[r_outliers,2], facecolors='none', edgecolors='red', s=80, linewidths=1.5, label='>1std outlier')
+
+        ax1.set_title('Spatial Rotation Error Map (deg)')
+        ax1.set_xlabel('X (mm)'), ax1.set_ylabel('Y (mm)'), ax1.set_zlabel('Z (mm)')
+        ax1.legend()
+        fig.colorbar(sc1, ax=ax1, label='Error (deg)', shrink=0.7)
+
+        # --- PLOT 2: Translation Error ---
+        ax2 = fig.add_subplot(122, projection='3d')
+        sc2 = ax2.scatter(coords[:,0], coords[:,1], coords[:,2], c=t_mags, cmap='viridis', s=10)
+
+        ax2.quiver(coords[:,0], coords[:,1], coords[:,2], t_err_vecs[:,0], t_err_vecs[:,1], t_err_vecs[:,2],
+                   length=1.0, color='midnightblue', alpha=0.6)
+
+        ax2.scatter(coords[0,0], coords[0,1], coords[0,2], c='red', marker='*', s=100, label='Start Point')
+        ax2.scatter(coords[max_t_idx,0], coords[max_t_idx,1], coords[max_t_idx,2], c='yellow', marker='*', s=150, edgecolors='black', label='Max Error Point')
+        ax2.scatter(coords[t_outliers,0], coords[t_outliers,1], coords[t_outliers,2], facecolors='none', edgecolors='red', s=80, linewidths=1.5, label='>1std outlier')
+
+        ax2.set_title('Spatial Translation Error Map (mm)')
+        ax2.set_xlabel('X (mm)'), ax2.set_ylabel('Y (mm)'), ax2.set_zlabel('Z (mm)')
+        ax2.legend()
+        fig.colorbar(sc2, ax=ax2, label='Error (mm)', shrink=0.7)
 
     plt.tight_layout()
 
+    plot_prefix = (
+        "orientation_error_map"
+        if validation_mode == "orientation"
+        else "spatial_error_map"
+    )
     save_filename = os.path.join(
-        output_dir, f'spatial_error_map_{solution}_{timestamp}.png')
+        output_dir, f'{plot_prefix}_{artifact_tag}_{timestamp}.png')
     
     plt.savefig(save_filename, dpi=300, bbox_inches='tight')
     print(f"\n✓ Saved high-resolution plot to: {save_filename}")
@@ -262,6 +308,7 @@ def evaluate_and_plot(
         "mean_rotation_error_deg": float(np.mean(r_mags)),
         "max_rotation_error_deg": float(np.max(r_mags)),
         "solution": solution,
+        "validation_mode": validation_mode,
         "residual_csv": csv_path,
         "plot": save_filename,
     }

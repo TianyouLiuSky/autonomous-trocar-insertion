@@ -4,6 +4,7 @@ import pyrealsense2 as rs
 import rospy
 import os
 import csv
+import argparse
 from datetime import datetime
 from geometry_msgs.msg import Transform
 from scipy.spatial.transform import Rotation
@@ -15,8 +16,11 @@ SQUARES_X, SQUARES_Y = 8, 6
 SQUARE_LEN = 0.010
 MARKER_LEN = 0.007
 DICT_ID = cv2.aruco.DICT_6X6_250
-N_SAMPLES = 27  # 24mm^3 grid
 MIN_CORNERS = 8
+MODE_SAMPLE_COUNTS = {
+    "spatial": 27,
+    "orientation": 25,
+}
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "output")
@@ -97,8 +101,10 @@ class RobotTracker:
         }
 
 class DataCollectorGUI(QtWidgets.QWidget):
-    def __init__(self):
+    def __init__(self, mode, expected_samples):
         super().__init__()
+        self.mode = mode
+        self.expected_samples = expected_samples
         self.camera = RealSenseCamera()
         self.detector = CharucoDetector()
         self.robot = RobotTracker()
@@ -118,8 +124,12 @@ class DataCollectorGUI(QtWidgets.QWidget):
         self.timer.start(33)
 
     def setup_ui(self):
-        self.setWindowTitle("Validation Data Collector")
-        self.status = QtWidgets.QLabel(f"Captured: 0 / {N_SAMPLES}")
+        self.setWindowTitle(
+            "Validation Data Collector - {}".format(self.mode.capitalize())
+        )
+        self.status = QtWidgets.QLabel(
+            f"Captured: 0 / {self.expected_samples} ({self.mode})"
+        )
         self.status.setStyleSheet("font-size: 16pt; font-weight: bold; color: blue;")
         self.status.setAlignment(QtCore.Qt.AlignCenter)
 
@@ -219,24 +229,36 @@ class DataCollectorGUI(QtWidgets.QWidget):
         }
         self.diagnostic_rows.append(row)
         
-        self.status.setText(f"Captured: {count} / {N_SAMPLES}")
+        self.status.setText(
+            f"Captured: {count} / {self.expected_samples} ({self.mode})"
+        )
         print(
-            f"✓ Recorded Pose {count}/{N_SAMPLES} "
+            f"✓ Recorded Pose {count}/{self.expected_samples} "
             f"(corners={corner_count}, reproj={reproj:.3f}px)"
         )
 
-        if count >= N_SAMPLES:
+        if count >= self.expected_samples:
             self.save_and_exit()
 
     def save_and_exit(self):
         print("\nAll samples collected! Saving dataset...")
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         stamp = timestamp()
+        mode_tag = self.mode.lower()
         latest_npz = os.path.join(SCRIPT_DIR, "validation_dataset.npz")
-        timestamped_npz = os.path.join(OUTPUT_DIR, f"validation_dataset_{stamp}.npz")
-        csv_path = os.path.join(OUTPUT_DIR, f"validation_samples_{stamp}.csv")
+        mode_latest_npz = os.path.join(
+            SCRIPT_DIR, f"validation_dataset_{mode_tag}.npz"
+        )
+        timestamped_npz = os.path.join(
+            OUTPUT_DIR, f"validation_dataset_{mode_tag}_{stamp}.npz"
+        )
+        csv_path = os.path.join(
+            OUTPUT_DIR, f"validation_samples_{mode_tag}_{stamp}.csv"
+        )
 
         payload = {
+            "validation_mode": np.array(self.mode),
+            "expected_samples": np.array(self.expected_samples, dtype=int),
             "robot_poses": np.array(self.robot_poses, dtype=object),
             "board_rvecs": np.array(self.board_rvecs),
             "board_tvecs": np.array(self.board_tvecs),
@@ -245,6 +267,7 @@ class DataCollectorGUI(QtWidgets.QWidget):
             "diagnostic_rows": np.array(self.diagnostic_rows, dtype=object),
         }
         np.savez(latest_npz, **payload)
+        np.savez(mode_latest_npz, **payload)
         np.savez(timestamped_npz, **payload)
 
         if self.diagnostic_rows:
@@ -253,9 +276,12 @@ class DataCollectorGUI(QtWidgets.QWidget):
                 writer.writeheader()
                 writer.writerows(self.diagnostic_rows)
         
-        self.status.setText("✓ SAVED validation dataset. You can close this window.")
+        self.status.setText(
+            f"✓ SAVED {self.mode} validation dataset. You can close this window."
+        )
         self.status.setStyleSheet("font-size: 16pt; font-weight: bold; color: green;")
         print(f"✓ Saved latest dataset -> {latest_npz}")
+        print(f"✓ Saved latest {self.mode} dataset -> {mode_latest_npz}")
         print(f"✓ Saved timestamped dataset -> {timestamped_npz}")
         print(f"✓ Saved validation sample CSV -> {csv_path}")
         print("✓ You can now run evaluate_calibration.py")
@@ -264,8 +290,38 @@ class DataCollectorGUI(QtWidgets.QWidget):
         self.camera.stop()
         event.accept()
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Capture spatial or orientation hand-eye validation data."
+    )
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "-s", "--spatial", action="store_const", dest="mode",
+        const="spatial", help="Capture the 27-pose spatial validation set."
+    )
+    mode_group.add_argument(
+        "-o", "--orientation", action="store_const", dest="mode",
+        const="orientation", help="Capture the 25-pose orientation validation set."
+    )
+    parser.set_defaults(mode="spatial")
+    parser.add_argument(
+        "--samples", type=int, default=None,
+        help="Override the expected sample count for an interrupted/custom run."
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = parse_args()
+    expected_samples = (
+        args.samples
+        if args.samples is not None
+        else MODE_SAMPLE_COUNTS[args.mode]
+    )
+    if expected_samples <= 0:
+        raise SystemExit("--samples must be positive")
+
     rospy.init_node('validation_data_collector', anonymous=True)
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    gui = DataCollectorGUI()
+    gui = DataCollectorGUI(args.mode, expected_samples)
     app.exec_()

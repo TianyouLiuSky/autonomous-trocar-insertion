@@ -82,12 +82,21 @@ def evaluate_and_plot(
             return None
         T_cam2base = calib_data[camera_key]           # Matrix X
         T_board2gripper = calib_data[board_key]       # Matrix Y
+        calibration_camera_matrix = (
+            np.asarray(calib_data["camera_matrix"])
+            if "camera_matrix" in calib_data else None
+        )
+        calibration_intrinsics_source = (
+            str(calib_data["camera_intrinsics_source"].item())
+            if "camera_intrinsics_source" in calib_data
+            else "not recorded"
+        )
         print(f"Loaded {solution} calibration: {calib_npz_path}")
     except Exception as e:
         print(f"Failed to load calibration file: {e}")
         return
 
-    # 2. Load the Static Validation Ground Truth Data
+    # 2. Load the static validation data
     try:
         val_data = np.load(validation_npz_path, allow_pickle=True)
         robot_poses = val_data['robot_poses'] # Matrix A components
@@ -95,13 +104,47 @@ def evaluate_and_plot(
         board_tvecs = val_data['board_tvecs']
         corner_counts = val_data['corner_counts'] if 'corner_counts' in val_data else None
         reproj_errors = val_data['reprojection_errors_px'] if 'reprojection_errors_px' in val_data else None
+        validation_camera_matrix = (
+            np.asarray(val_data["camera_matrix"])
+            if "camera_matrix" in val_data else None
+        )
+        validation_intrinsics_source = (
+            str(val_data["camera_intrinsics_source"].item())
+            if "camera_intrinsics_source" in val_data
+            else "not recorded"
+        )
         validation_mode = (
             str(val_data['validation_mode'].item())
             if 'validation_mode' in val_data
             else 'validation'
         )
-        print(f"Loaded {len(robot_poses)} Ground Truth samples from: {validation_npz_path}")
+        print(
+            f"Loaded {len(robot_poses)} validation samples from: "
+            f"{validation_npz_path}"
+        )
         print(f"Validation mode: {validation_mode}")
+        print(
+            "Calibration intrinsics: {}".format(
+                calibration_intrinsics_source)
+        )
+        print(
+            "Validation intrinsics:  {}".format(
+                validation_intrinsics_source)
+        )
+        if (
+                calibration_camera_matrix is not None
+                and validation_camera_matrix is not None):
+            intrinsic_delta = float(np.max(np.abs(
+                calibration_camera_matrix - validation_camera_matrix)))
+            print(
+                "Maximum calibration/validation K difference: "
+                "{:.6f} px".format(intrinsic_delta)
+            )
+            if intrinsic_delta > 1e-6:
+                print(
+                    "WARNING: calibration and validation used different "
+                    "camera intrinsics."
+                )
     except Exception as e:
         print(f"Failed to load validation file: {e}")
         return

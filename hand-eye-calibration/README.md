@@ -158,6 +158,11 @@ The solver estimates:
 - `T_cam2base`
 - `T_board2gripper`
 
+It initializes rotation from relative motion, solves translation linearly, and
+then runs robust joint least squares from multiple deterministic starts. The
+saved result includes conditioning and multi-start agreement metrics, while the
+legacy unweighted solution remains available for comparison.
+
 Then press `Save (.npz)`. Results are written under:
 
 ```text
@@ -173,6 +178,16 @@ For the recommended decoupled spatial and orientation tests, use:
 ```text
 DECOUPLED_VALIDATION_README.md
 ```
+
+After both decoupled datasets have been collected, use:
+
+```text
+FRAME_CONSISTENCY_README.md
+```
+
+That workflow independently estimates camera rotation from spatial and
+orientation motion, audits FrameEE quaternion conventions, and explains how to
+run a dedicated D405 intrinsic calibration.
 
 The older `run_validation_24mm.py` sequence below changes XYZ and roll/pitch
 together. Keep it only for reproducing earlier combined-validation experiments;

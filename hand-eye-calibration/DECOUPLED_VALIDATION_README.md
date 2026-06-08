@@ -212,3 +212,12 @@ automatically bad captures.
    and quaternion/Euler conventions.
 6. If both are good but the old combined validation is bad, the previous
    combined pose set was confounding XYZ with roll/pitch.
+
+After collecting both mode-specific datasets, run:
+
+```bash
+python3 diagnose_frame_consistency.py
+```
+
+See `FRAME_CONSISTENCY_README.md` for the FrameEE convention audit, independent
+translation/rotation estimates, and D405 intrinsic-calibration experiment.

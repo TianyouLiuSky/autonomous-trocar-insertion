@@ -10,6 +10,7 @@ from geometry_msgs.msg import Transform
 from scipy.spatial.transform import Rotation
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui
+from camera_intrinsics import load_intrinsics
 
 CAMERA_W, CAMERA_H, CAMERA_FPS = 1280, 720, 15
 SQUARES_X, SQUARES_Y = 8, 6
@@ -37,7 +38,7 @@ def reprojection_error_px(obj_pts, img_pts, rvec, tvec, K, dist):
     return float(np.sqrt(np.mean(np.sum((observed - projected) ** 2, axis=1))))
 
 class RealSenseCamera:
-    def __init__(self):
+    def __init__(self, intrinsics_path=None):
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_stream(rs.stream.color, CAMERA_W, CAMERA_H, rs.format.bgr8, CAMERA_FPS)
@@ -45,6 +46,12 @@ class RealSenseCamera:
         intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
         self.K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]])
         self.dist = np.array(intr.coeffs[:5])
+        self.intrinsics_source = "D405 factory"
+        fitted = load_intrinsics(
+            intrinsics_path, CAMERA_W, CAMERA_H)
+        if fitted is not None:
+            self.K, self.dist, self.intrinsics_source = fitted
+        print("Camera intrinsics: {}".format(self.intrinsics_source))
 
     def get_frame(self):
         frames = self.pipeline.wait_for_frames()
@@ -101,11 +108,11 @@ class RobotTracker:
         }
 
 class DataCollectorGUI(QtWidgets.QWidget):
-    def __init__(self, mode, expected_samples):
+    def __init__(self, mode, expected_samples, intrinsics_path=None):
         super().__init__()
         self.mode = mode
         self.expected_samples = expected_samples
-        self.camera = RealSenseCamera()
+        self.camera = RealSenseCamera(intrinsics_path)
         self.detector = CharucoDetector()
         self.robot = RobotTracker()
 
@@ -265,6 +272,10 @@ class DataCollectorGUI(QtWidgets.QWidget):
             "corner_counts": np.array(self.corner_counts, dtype=int),
             "reprojection_errors_px": np.array(self.reprojection_errors_px, dtype=float),
             "diagnostic_rows": np.array(self.diagnostic_rows, dtype=object),
+            "camera_matrix": self.camera.K,
+            "dist_coeffs": self.camera.dist,
+            "camera_intrinsics_source": np.array(
+                self.camera.intrinsics_source),
         }
         np.savez(latest_npz, **payload)
         np.savez(mode_latest_npz, **payload)
@@ -308,6 +319,13 @@ def parse_args():
         "--samples", type=int, default=None,
         help="Override the expected sample count for an interrupted/custom run."
     )
+    parser.add_argument(
+        "--intrinsics", default=os.environ.get("HE_CAMERA_INTRINSICS"),
+        help=(
+            "Optional fitted intrinsics .npz. Defaults to D405 factory "
+            "intrinsics; may also be set with HE_CAMERA_INTRINSICS."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -323,5 +341,6 @@ if __name__ == "__main__":
 
     rospy.init_node('validation_data_collector', anonymous=True)
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    gui = DataCollectorGUI(args.mode, expected_samples)
+    gui = DataCollectorGUI(
+        args.mode, expected_samples, args.intrinsics)
     app.exec_()

@@ -16,6 +16,7 @@ import sys
 import datetime
 import threading
 import csv
+import argparse
 
 import cv2
 import pyrealsense2 as rs
@@ -24,6 +25,14 @@ import rospy
 from geometry_msgs.msg import Transform
 from scipy.spatial.transform import Rotation
 from scipy.optimize import least_squares
+from camera_intrinsics import load_intrinsics
+from handeye_math import (
+    estimate_rotations_from_relative_motion,
+    rotation_angle_deg,
+    solution_vector,
+    solve_translations,
+    transforms_from_samples,
+)
 
 from PyQt5.QtCore    import Qt, QTimer
 from PyQt5.QtGui     import QImage, QPixmap, QKeySequence
@@ -56,11 +65,15 @@ MIN_ROTATION_DEG = 5.0
 # rotation error and a 1.0 mm translation error have equal influence. Increase
 # a scale to reduce that component's influence. Environment overrides make
 # weight experiments possible without editing this file.
-SOLVER_PROFILE = 'translation_priority_v1'
+SOLVER_PROFILE = 'relative_init_robust_multistart_v2'
 SOLVER_ROTATION_SCALE_DEG = float(
     os.environ.get('HE_SOLVER_ROTATION_SCALE_DEG', '0.5'))
 SOLVER_TRANSLATION_SCALE_MM = float(
     os.environ.get('HE_SOLVER_TRANSLATION_SCALE_MM', '1.0'))
+SOLVER_ROBUST_LOSS = os.environ.get(
+    'HE_SOLVER_ROBUST_LOSS', 'soft_l1')
+SOLVER_MULTISTARTS = int(
+    os.environ.get('HE_SOLVER_MULTISTARTS', '5'))
 
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
@@ -140,7 +153,7 @@ def _timestamp():
 # D405  (direct RealSense)
 # ─────────────────────────────────────────────────────────────────────────────
 class D405Camera(object):
-    def __init__(self):
+    def __init__(self, intrinsics_path=None):
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_stream(rs.stream.color, CAMERA_W, CAMERA_H, rs.format.bgr8, CAMERA_FPS)
@@ -148,7 +161,13 @@ class D405Camera(object):
         intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
         self.K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]])
         self.dist = np.array(intr.coeffs[:5])
+        self.intrinsics_source = "D405 factory"
+        fitted = load_intrinsics(
+            intrinsics_path, CAMERA_W, CAMERA_H)
+        if fitted is not None:
+            self.K, self.dist, self.intrinsics_source = fitted
         print("D405 direct: {}x{} @ {}fps".format(CAMERA_W, CAMERA_H, CAMERA_FPS))
+        print("Camera intrinsics: {}".format(self.intrinsics_source))
 
     def get_frame(self):
         frames = self.pipeline.wait_for_frames()
@@ -342,6 +361,72 @@ class HandEyeCalibrator(object):
             'rotation_max_deg': float(np.max(rotation_errors_deg)),
         }
 
+    def _relative_motion_initialization(self):
+        (
+            robot_rotations,
+            robot_translations,
+            board_rotations,
+            board_translations,
+        ) = transforms_from_samples(
+            self.robot_poses, self.board_rvecs, self.board_tvecs)
+        rotation_fit = estimate_rotations_from_relative_motion(
+            robot_rotations, board_rotations)
+        translation_fit = solve_translations(
+            robot_rotations,
+            robot_translations,
+            board_translations,
+            rotation_fit['camera_rotation'],
+        )
+        initial = solution_vector(
+            rotation_fit['board_rotation'],
+            translation_fit['board_translation'],
+            rotation_fit['camera_rotation'],
+            translation_fit['camera_translation'],
+        )
+        singular_values = rotation_fit['singular_values']
+        nullspace_gap = float(
+            singular_values[-2] / max(singular_values[-1], 1e-15)
+        )
+        return initial, {
+            'rotation_nullspace_gap': nullspace_gap,
+            'translation_condition_number':
+                translation_fit['condition_number'],
+            'translation_rank': translation_fit['rank'],
+            'relative_rotation_mean_deg': float(np.mean(
+                rotation_fit['sample_errors_deg'])),
+            'relative_rotation_max_deg': float(np.max(
+                rotation_fit['sample_errors_deg'])),
+        }
+
+    def _multistart_initializations(self, relative_x, legacy_x):
+        count = max(2, SOLVER_MULTISTARTS)
+        starts = [
+            ('relative_motion', relative_x.copy()),
+            ('legacy', legacy_x.copy()),
+        ]
+        rng = np.random.RandomState(20260608)
+        while len(starts) < count:
+            base_name, base = starts[(len(starts) - 2) % 2]
+            perturbed = base.copy()
+            perturbed[0:3] += rng.normal(
+                0.0, np.deg2rad(2.0), size=3)
+            perturbed[6:9] += rng.normal(
+                0.0, np.deg2rad(2.0), size=3)
+            perturbed[3:6] += rng.normal(0.0, 0.002, size=3)
+            perturbed[9:12] += rng.normal(0.0, 0.002, size=3)
+            starts.append(
+                ('{}_perturbed_{}'.format(base_name, len(starts)), perturbed)
+            )
+        return starts
+
+    @staticmethod
+    def _jacobian_condition(jacobian):
+        singular_values = np.linalg.svd(
+            jacobian, compute_uv=False)
+        if singular_values[-1] < 1e-15:
+            return float('inf')
+        return float(singular_values[0] / singular_values[-1])
+
     @staticmethod
     def _matrices_from_solution(x):
         RY, tY, RX, tX = HandEyeCalibrator._unpack_solution(x)
@@ -366,16 +451,79 @@ class HandEyeCalibrator(object):
         if not legacy_sol.success:
             return None
 
-        weighted_sol = least_squares(
-            self._weighted_residual, legacy_sol.x, ftol=1e-9, xtol=1e-9,
-            gtol=1e-9, x_scale='jac', max_nfev=4000)
-        if not weighted_sol.success:
+        if SOLVER_ROBUST_LOSS not in (
+                'linear', 'soft_l1', 'huber', 'cauchy', 'arctan'):
+            raise ValueError(
+                "Unsupported HE_SOLVER_ROBUST_LOSS={!r}".format(
+                    SOLVER_ROBUST_LOSS)
+            )
+
+        try:
+            relative_x, conditioning = (
+                self._relative_motion_initialization())
+        except Exception as exc:
+            print(
+                "Relative-motion initialization failed; using legacy "
+                "initialization: {}".format(exc)
+            )
+            relative_x = legacy_sol.x.copy()
+            conditioning = {
+                'rotation_nullspace_gap': float('nan'),
+                'translation_condition_number': float('nan'),
+                'translation_rank': 0,
+                'relative_rotation_mean_deg': float('nan'),
+                'relative_rotation_max_deg': float('nan'),
+            }
+
+        candidates = []
+        for start_name, start_x in self._multistart_initializations(
+                relative_x, legacy_sol.x):
+            solution = least_squares(
+                self._weighted_residual,
+                start_x,
+                ftol=1e-10,
+                xtol=1e-10,
+                gtol=1e-10,
+                x_scale='jac',
+                loss=SOLVER_ROBUST_LOSS,
+                f_scale=1.0,
+                max_nfev=6000,
+            )
+            if solution.success and np.all(np.isfinite(solution.x)):
+                candidates.append((solution.cost, start_name, solution))
+        if not candidates:
             return None
+
+        _, selected_start, weighted_sol = min(
+            candidates, key=lambda item: item[0])
 
         Tc, Tb = self._matrices_from_solution(weighted_sol.x)
         legacy_Tc, legacy_Tb = self._matrices_from_solution(legacy_sol.x)
         metrics = self._solution_diagnostics(weighted_sol.x)
         legacy_metrics = self._solution_diagnostics(legacy_sol.x)
+
+        solved_camera_rotations = []
+        solved_camera_translations = []
+        for _, _, candidate in candidates:
+            candidate_tc, _ = self._matrices_from_solution(candidate.x)
+            solved_camera_rotations.append(candidate_tc[:3, :3])
+            solved_camera_translations.append(candidate_tc[:3, 3])
+        rotation_spread_deg = 0.0
+        translation_spread_mm = 0.0
+        for i in range(len(candidates)):
+            for j in range(i + 1, len(candidates)):
+                rotation_spread_deg = max(
+                    rotation_spread_deg,
+                    rotation_angle_deg(
+                        solved_camera_rotations[j]
+                        @ solved_camera_rotations[i].T),
+                )
+                translation_spread_mm = max(
+                    translation_spread_mm,
+                    np.linalg.norm(
+                        solved_camera_translations[j]
+                        - solved_camera_translations[i]) * 1000.0,
+                )
         return {
             'T_cam2base': Tc,
             'T_board2gripper': Tb,
@@ -395,8 +543,27 @@ class HandEyeCalibrator(object):
             'legacy_rotation_err_max_deg':
                 legacy_metrics['rotation_max_deg'],
             'solver_profile': SOLVER_PROFILE,
+            'solver_robust_loss': SOLVER_ROBUST_LOSS,
+            'solver_selected_start': selected_start,
+            'solver_successful_starts': len(candidates),
+            'solver_requested_starts': max(2, SOLVER_MULTISTARTS),
             'solver_rotation_scale_deg': SOLVER_ROTATION_SCALE_DEG,
             'solver_translation_scale_mm': SOLVER_TRANSLATION_SCALE_MM,
+            'solver_jacobian_condition':
+                self._jacobian_condition(weighted_sol.jac),
+            'rotation_nullspace_gap':
+                conditioning['rotation_nullspace_gap'],
+            'translation_condition_number':
+                conditioning['translation_condition_number'],
+            'translation_rank': conditioning['translation_rank'],
+            'relative_rotation_mean_deg':
+                conditioning['relative_rotation_mean_deg'],
+            'relative_rotation_max_deg':
+                conditioning['relative_rotation_max_deg'],
+            'multistart_camera_rotation_spread_deg':
+                rotation_spread_deg,
+            'multistart_camera_translation_spread_mm':
+                translation_spread_mm,
             'n': self.n,
         }
 
@@ -405,13 +572,13 @@ class HandEyeCalibrator(object):
 # ─────────────────────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
 
-    def __init__(self):
+    def __init__(self, intrinsics_path=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle("ATI  |  Hand-Eye Calibration")
         self.setStyleSheet(GLOBAL_STYLE)
         self.resize(1280, 800)
 
-        self._cam     = D405Camera()
+        self._cam     = D405Camera(intrinsics_path)
         self._det     = ChArUcoDetector()
         self._tracker = RobotTracker()
         self._cal     = HandEyeCalibrator()
@@ -626,6 +793,25 @@ class MainWindow(QMainWindow):
                 r['legacy_translation_err_max_mm'],
                 r['legacy_rotation_err_mean_deg'],
                 r['legacy_rotation_err_max_deg']))
+        self._log_msg(
+            "Robust solver: loss={}, start={}, starts={}/{}, "
+            "Jacobian cond={:.3g}".format(
+                r['solver_robust_loss'],
+                r['solver_selected_start'],
+                r['solver_successful_starts'],
+                r['solver_requested_starts'],
+                r['solver_jacobian_condition']))
+        self._log_msg(
+            "Initialization conditioning: rotation nullspace gap={:.3g}, "
+            "translation cond={:.3g}, rank={}".format(
+                r['rotation_nullspace_gap'],
+                r['translation_condition_number'],
+                r['translation_rank']))
+        self._log_msg(
+            "Multi-start X spread: rotation={:.6f}deg, "
+            "translation={:.6f}mm".format(
+                r['multistart_camera_rotation_spread_deg'],
+                r['multistart_camera_translation_spread_mm']))
         self._btn_save.setEnabled(True)
 
     def _save(self):
@@ -638,6 +824,7 @@ class MainWindow(QMainWindow):
                  legacy_T_cam2base=self._result['legacy_T_cam2base'],
                  legacy_T_board2gripper=self._result['legacy_T_board2gripper'],
                  camera_matrix=self._cam.K, dist_coeffs=self._cam.dist,
+                 camera_intrinsics_source=self._cam.intrinsics_source,
                  err_mm=self._result['err_mm'],
                  translation_err_mean_mm=self._result['translation_err_mean_mm'],
                  translation_err_max_mm=self._result['translation_err_max_mm'],
@@ -652,10 +839,34 @@ class MainWindow(QMainWindow):
                  legacy_rotation_err_max_deg=
                      self._result['legacy_rotation_err_max_deg'],
                  solver_profile=self._result['solver_profile'],
+                 solver_robust_loss=self._result['solver_robust_loss'],
+                 solver_selected_start=
+                     self._result['solver_selected_start'],
+                 solver_successful_starts=
+                     self._result['solver_successful_starts'],
+                 solver_requested_starts=
+                     self._result['solver_requested_starts'],
                  solver_rotation_scale_deg=
                      self._result['solver_rotation_scale_deg'],
                  solver_translation_scale_mm=
                      self._result['solver_translation_scale_mm'],
+                 solver_jacobian_condition=
+                     self._result['solver_jacobian_condition'],
+                 rotation_nullspace_gap=
+                     self._result['rotation_nullspace_gap'],
+                 translation_condition_number=
+                     self._result['translation_condition_number'],
+                 translation_rank=self._result['translation_rank'],
+                 relative_rotation_mean_deg=
+                     self._result['relative_rotation_mean_deg'],
+                 relative_rotation_max_deg=
+                     self._result['relative_rotation_max_deg'],
+                 multistart_camera_rotation_spread_deg=
+                     self._result[
+                         'multistart_camera_rotation_spread_deg'],
+                 multistart_camera_translation_spread_mm=
+                     self._result[
+                         'multistart_camera_translation_spread_mm'],
                  n_samples=self._result['n'])
         self._log_msg("v Saved -> {}".format(path))
         self._err_lbl.setText("v Saved: {}".format(os.path.basename(path)))
@@ -744,9 +955,23 @@ class MainWindow(QMainWindow):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run D405 fixed-camera hand-eye calibration.")
+    parser.add_argument(
+        "--intrinsics", default=os.environ.get("HE_CAMERA_INTRINSICS"),
+        help=(
+            "Optional fitted intrinsics .npz. Defaults to D405 factory "
+            "intrinsics; may also be set with HE_CAMERA_INTRINSICS."
+        ),
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
+    args = _parse_args()
     rospy.init_node('ati_he_calibration', anonymous=True)
-    app = QApplication.instance() or QApplication(sys.argv)
-    win = MainWindow()
+    app = QApplication.instance() or QApplication([sys.argv[0]])
+    win = MainWindow(args.intrinsics)
     win.show()
     sys.exit(app.exec_())

@@ -32,9 +32,29 @@ validation_dataset_orientation.npz
 
 ## 2. Run the Frame-Consistency Diagnostic
 
+For a quick check of the mutable latest-dataset aliases:
+
 ```bash
 python3 diagnose_frame_consistency.py
 ```
+
+For comparisons between experiments, use the timestamped files explicitly:
+
+```bash
+python3 diagnose_frame_consistency.py \
+  --spatial output/validation_dataset_spatial_YYYYMMDD_HHMMSS.npz \
+  --orientation output/validation_dataset_orientation_YYYYMMDD_HHMMSS.npz
+```
+
+The terminal output and JSON summary identify each input by path, modification
+time, sample count, and SHA-256 digest. If two runs show the same digests, they
+analyzed the same captured data even if the diagnostic itself was run at
+different times.
+
+An `Intrinsics: ...=not recorded` result means the dataset predates intrinsics
+provenance logging. It cannot be used to compare D405 factory intrinsics with a
+fitted intrinsic calibration; recollect both validation datasets with the
+desired `--intrinsics` argument.
 
 The script estimates `R_cam2base` in two independent ways:
 

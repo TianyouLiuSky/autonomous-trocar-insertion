@@ -4,6 +4,7 @@
 import argparse
 import csv
 import datetime
+import hashlib
 import json
 from pathlib import Path
 
@@ -95,6 +96,27 @@ def matrix_list(matrix):
     return np.asarray(matrix, dtype=float).round(12).tolist()
 
 
+def dataset_identity(path, sample_count):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    stat = path.stat()
+    modified = datetime.datetime.fromtimestamp(
+        stat.st_mtime).astimezone().isoformat(timespec="seconds")
+    return {
+        "path": str(path),
+        "sample_count": int(sample_count),
+        "size_bytes": int(stat.st_size),
+        "modified": modified,
+        "sha256": digest.hexdigest(),
+        "is_latest_alias": path.name in (
+            "validation_dataset_spatial.npz",
+            "validation_dataset_orientation.npz",
+        ),
+    }
+
+
 def analyze(spatial_path, orientation_path, output_dir):
     (
         spatial_robot,
@@ -160,6 +182,10 @@ def analyze(spatial_path, orientation_path, output_dir):
         ),
     )
     standard_fit = orientation_fits["xyzw"]
+    spatial_identity = dataset_identity(
+        spatial_path, len(spatial_robot))
+    orientation_identity = dataset_identity(
+        orientation_path, len(orientation_robot))
 
     stamp = timestamp()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -198,6 +224,10 @@ def analyze(spatial_path, orientation_path, output_dir):
     summary = {
         "spatial_dataset": str(spatial_path),
         "orientation_dataset": str(orientation_path),
+        "datasets": {
+            "spatial": spatial_identity,
+            "orientation": orientation_identity,
+        },
         "spatial_translation_fit": {
             "mean_residual_mm": float(np.mean(spatial_residual_mm)),
             "max_residual_mm": float(np.max(spatial_residual_mm)),
@@ -244,12 +274,39 @@ def analyze(spatial_path, orientation_path, output_dir):
         json.dump(summary, handle, indent=2)
 
     print("\nFRAME-CONSISTENCY DIAGNOSTIC")
+    print("Input datasets:")
+    for mode, identity in (
+            ("spatial", spatial_identity),
+            ("orientation", orientation_identity)):
+        print("  {}: {}".format(mode, identity["path"]))
+        print(
+            "    samples={} modified={} sha256={}...".format(
+                identity["sample_count"],
+                identity["modified"],
+                identity["sha256"][:12],
+            )
+        )
+    if (
+            spatial_identity["is_latest_alias"]
+            or orientation_identity["is_latest_alias"]):
+        print(
+            "  NOTE: a mutable latest-dataset alias is in use. Pass the "
+            "timestamped NPZ paths when comparing separate captures."
+        )
     print(
         "Intrinsics: spatial={} | orientation={}".format(
             spatial_metadata["camera_intrinsics_source"],
             orientation_metadata["camera_intrinsics_source"],
         )
     )
+    if (
+            spatial_metadata["camera_intrinsics_source"] == "not recorded"
+            or orientation_metadata["camera_intrinsics_source"]
+            == "not recorded"):
+        print(
+            "  WARNING: intrinsics provenance is missing. These datasets "
+            "cannot distinguish factory from fitted intrinsics."
+        )
     intrinsic_delta = summary["intrinsics"][
         "maximum_camera_matrix_difference_px"]
     if intrinsic_delta is not None:

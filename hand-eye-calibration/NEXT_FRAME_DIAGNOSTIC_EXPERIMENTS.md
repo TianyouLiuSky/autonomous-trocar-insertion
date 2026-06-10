@@ -188,6 +188,39 @@ output/d405_charuco_intrinsics_YYYYMMDD_HHMMSS.json
 output/d405_charuco_intrinsics_views_YYYYMMDD_HHMMSS.csv
 ```
 
+Do not proceed to Experiment 3 if the calibration prints either coverage
+warning. The intended minimum coverage is:
+
+```text
+board-center horizontal span: at least 0.50 of image width
+board-center vertical span:   at least 0.40 of image height
+largest/smallest board area:  at least 1.5x
+```
+
+If coverage fails, create another fresh capture directory and deliberately
+place the board near the left edge, right edge, top, bottom, and all four
+corners. The board does not need to remain centered. Include near and far
+views, but keep enough ChArUco corners visible for a reliable detection.
+
+You may instead append edge and corner views to the existing capture directory.
+For example, increase a 40-view set to 60 views:
+
+```bash
+CAPTURE_DIR="$(ls -dt output/intrinsics_capture_* | head -n 1)"
+echo "Adding views to $CAPTURE_DIR"
+python3 calibrate_d405_intrinsics.py \
+  --capture \
+  --samples 60 \
+  --capture-dir "$CAPTURE_DIR"
+python3 calibrate_d405_intrinsics.py \
+  --calibrate \
+  --min-views 20 \
+  --capture-dir "$CAPTURE_DIR"
+```
+
+Use the new NPZ printed by this second calibration, not the earlier
+coverage-warning NPZ.
+
 Set the exact fitted file for the remaining commands:
 
 ```bash
@@ -215,16 +248,26 @@ intrinsics make the spatial and orientation frame estimates agree.
 
 Use the same fitted NPZ for both collectors.
 
+This experiment must create two new datasets after the intrinsic NPZ was
+created. Do not reuse the factory datasets from Experiment 1. Their saved
+intrinsics source will remain `D405 factory`, even if a fitted NPZ is created
+later.
+
 ### 3A. Fitted-Intrinsics Spatial Data
 
 Terminal 1:
 
 ```bash
-python3 collect_validation_data.py -s --intrinsics "$INTRINSICS"
+INTRINSICS="output/d405_charuco_intrinsics_YYYYMMDD_HHMMSS.npz"
+python3 collect_validation_data.py \
+  -s \
+  --intrinsics "$INTRINSICS" \
+  --require-fitted-intrinsics
 ```
 
 Confirm that the printed camera-intrinsics source is the absolute path to the
-fitted NPZ, not `D405 factory`.
+fitted NPZ, not `D405 factory`. The collector window also displays
+`Intrinsics: FITTED`. Stop immediately if it displays `FACTORY`.
 
 Terminal 2:
 
@@ -239,7 +282,32 @@ Record the new timestamped spatial NPZ.
 Terminal 1:
 
 ```bash
-python3 collect_validation_data.py -o --intrinsics "$INTRINSICS"
+INTRINSICS="output/d405_charuco_intrinsics_YYYYMMDD_HHMMSS.npz"
+test -f "$INTRINSICS" || {
+  echo "Intrinsics file is missing: $INTRINSICS"
+  exit 1
+}
+python3 collect_validation_data.py \
+  -o \
+  --intrinsics "$INTRINSICS" \
+  --require-fitted-intrinsics
+```
+
+Replace the timestamp before running this block. Shell variables do not carry
+into a newly opened terminal. To inspect the value before launching:
+
+```bash
+printf 'INTRINSICS=<%s>\n' "$INTRINSICS"
+```
+
+An output of `INTRINSICS=<>` means the variable is unset. Passing that empty
+value causes the current working directory to be interpreted as the path.
+Using the literal path is also valid:
+
+```bash
+python3 collect_validation_data.py -o \
+  --intrinsics output/d405_charuco_intrinsics_YYYYMMDD_HHMMSS.npz \
+  --require-fitted-intrinsics
 ```
 
 Terminal 2:

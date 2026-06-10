@@ -154,6 +154,8 @@ def _timestamp():
 # ─────────────────────────────────────────────────────────────────────────────
 class D405Camera(object):
     def __init__(self, intrinsics_path=None):
+        fitted = load_intrinsics(
+            intrinsics_path, CAMERA_W, CAMERA_H)
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_stream(rs.stream.color, CAMERA_W, CAMERA_H, rs.format.bgr8, CAMERA_FPS)
@@ -162,8 +164,6 @@ class D405Camera(object):
         self.K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]])
         self.dist = np.array(intr.coeffs[:5])
         self.intrinsics_source = "D405 factory"
-        fitted = load_intrinsics(
-            intrinsics_path, CAMERA_W, CAMERA_H)
         if fitted is not None:
             self.K, self.dist, self.intrinsics_source = fitted
         print("D405 direct: {}x{} @ {}fps".format(CAMERA_W, CAMERA_H, CAMERA_FPS))

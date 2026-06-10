@@ -8,7 +8,24 @@ import numpy as np
 def load_intrinsics(path, expected_width, expected_height):
     if path is None:
         return None
-    resolved = Path(path).expanduser().resolve()
+    path_text = str(path).strip()
+    if not path_text:
+        raise ValueError(
+            "The fitted-intrinsics path is empty. If using "
+            "--intrinsics \"$INTRINSICS\", set INTRINSICS in this terminal "
+            "or pass the .npz path directly."
+        )
+    resolved = Path(path_text).expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(
+            "Fitted-intrinsics file does not exist: {}".format(resolved)
+        )
+    if not resolved.is_file():
+        raise ValueError(
+            "Fitted-intrinsics path is not a file: {}. Pass the generated "
+            "d405_charuco_intrinsics_*.npz file, not its directory."
+            .format(resolved)
+        )
     with np.load(str(resolved), allow_pickle=True) as data:
         if "camera_matrix" not in data:
             raise ValueError(

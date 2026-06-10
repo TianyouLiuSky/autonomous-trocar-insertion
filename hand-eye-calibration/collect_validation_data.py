@@ -38,7 +38,15 @@ def reprojection_error_px(obj_pts, img_pts, rvec, tvec, K, dist):
     return float(np.sqrt(np.mean(np.sum((observed - projected) ** 2, axis=1))))
 
 class RealSenseCamera:
-    def __init__(self, intrinsics_path=None):
+    def __init__(
+            self, intrinsics_path=None, require_fitted_intrinsics=False):
+        fitted = load_intrinsics(
+            intrinsics_path, CAMERA_W, CAMERA_H)
+        if require_fitted_intrinsics and fitted is None:
+            raise ValueError(
+                "--require-fitted-intrinsics was set, but no fitted "
+                "--intrinsics NPZ was provided."
+            )
         self.pipeline = rs.pipeline()
         config = rs.config()
         config.enable_stream(rs.stream.color, CAMERA_W, CAMERA_H, rs.format.bgr8, CAMERA_FPS)
@@ -47,8 +55,6 @@ class RealSenseCamera:
         self.K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]])
         self.dist = np.array(intr.coeffs[:5])
         self.intrinsics_source = "D405 factory"
-        fitted = load_intrinsics(
-            intrinsics_path, CAMERA_W, CAMERA_H)
         if fitted is not None:
             self.K, self.dist, self.intrinsics_source = fitted
         print("Camera intrinsics: {}".format(self.intrinsics_source))
@@ -108,11 +114,14 @@ class RobotTracker:
         }
 
 class DataCollectorGUI(QtWidgets.QWidget):
-    def __init__(self, mode, expected_samples, intrinsics_path=None):
+    def __init__(
+            self, mode, expected_samples, intrinsics_path=None,
+            require_fitted_intrinsics=False):
         super().__init__()
         self.mode = mode
         self.expected_samples = expected_samples
-        self.camera = RealSenseCamera(intrinsics_path)
+        self.camera = RealSenseCamera(
+            intrinsics_path, require_fitted_intrinsics)
         self.detector = CharucoDetector()
         self.robot = RobotTracker()
 
@@ -139,6 +148,18 @@ class DataCollectorGUI(QtWidgets.QWidget):
         )
         self.status.setStyleSheet("font-size: 16pt; font-weight: bold; color: blue;")
         self.status.setAlignment(QtCore.Qt.AlignCenter)
+        fitted = self.camera.intrinsics_source != "D405 factory"
+        intrinsics_label = QtWidgets.QLabel(
+            "Intrinsics: {} | {}".format(
+                "FITTED" if fitted else "FACTORY",
+                self.camera.intrinsics_source,
+            )
+        )
+        intrinsics_label.setStyleSheet(
+            "font-size: 11pt; font-weight: bold; color: {};".format(
+                "green" if fitted else "darkorange")
+        )
+        intrinsics_label.setAlignment(QtCore.Qt.AlignCenter)
 
         self.win = pg.GraphicsLayoutWidget()
         self.view = self.win.addViewBox()
@@ -149,6 +170,7 @@ class DataCollectorGUI(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.status)
+        layout.addWidget(intrinsics_label)
         layout.addWidget(self.win, stretch=1)
         self.resize(1280, 800)
         self.show()
@@ -326,6 +348,13 @@ def parse_args():
             "intrinsics; may also be set with HE_CAMERA_INTRINSICS."
         ),
     )
+    parser.add_argument(
+        "--require-fitted-intrinsics", action="store_true",
+        help=(
+            "Refuse to start unless --intrinsics resolves to a fitted NPZ. "
+            "Use this for fitted-intrinsics experiments."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -342,5 +371,6 @@ if __name__ == "__main__":
     rospy.init_node('validation_data_collector', anonymous=True)
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     gui = DataCollectorGUI(
-        args.mode, expected_samples, args.intrinsics)
+        args.mode, expected_samples, args.intrinsics,
+        args.require_fitted_intrinsics)
     app.exec_()

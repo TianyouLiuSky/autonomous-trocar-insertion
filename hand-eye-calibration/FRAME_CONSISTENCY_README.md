@@ -7,6 +7,13 @@ explained by one rigid camera-to-base transform.
 The scripts are diagnostic. They do not apply a fitted angular correction to
 the saved hand-eye calibration.
 
+For the complete follow-up experiment sequence for the current `15.792 deg`
+translation-versus-orientation disagreement, see:
+
+```text
+NEXT_FRAME_DIAGNOSTIC_EXPERIMENTS.md
+```
+
 ## 1. Collect Both Validation Sets
 
 Collect spatial validation:

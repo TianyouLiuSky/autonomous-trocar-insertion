@@ -18,4 +18,5 @@ output/*.png
 data/*.csv
 home_position/*.json
 motion_logs/*.csv
+output/intrinsics_capture*
 intrinsics_capture/

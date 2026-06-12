@@ -88,7 +88,7 @@ like:
 
 ```bash
 python3 collect_axis_alignment_data.py \
-  --sequence "output/axis_alignment_sequence_TIMESTAMP.json" \
+  --sequence "output/axis_alignment_sequence_20260612_123255.json" \
   --intrinsics "$INTRINSICS" \
   --require-fitted-intrinsics
 ```
@@ -150,7 +150,7 @@ Use the timestamped orientation dataset collected with the same intrinsics:
 ```bash
 python3 analyze_axis_alignment.py \
   --axis-data output/axis_alignment_dataset_TIMESTAMP.npz \
-  --orientation output/validation_dataset_orientation_TIMESTAMP.npz
+  --orientation output/validation_dataset_orientation_.npz
 ```
 
 When paths are omitted, the analyzer chooses the most recently modified axis

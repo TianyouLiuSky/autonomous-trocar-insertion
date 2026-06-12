@@ -139,6 +139,10 @@ class DataCollectorGUI(QtWidgets.QWidget):
         self.timer.timeout.connect(self.update_frame)
         self.timer.start(33)
 
+    def sample_metadata(self, count):
+        """Return optional metadata for the next recorded sample."""
+        return {}
+
     def setup_ui(self):
         self.setWindowTitle(
             "Validation Data Collector - {}".format(self.mode.capitalize())
@@ -256,6 +260,7 @@ class DataCollectorGUI(QtWidgets.QWidget):
             "brd_pitch_deg": round(float(board_rpy[1]), 6),
             "brd_yaw_deg": round(float(board_rpy[2]), 6),
         }
+        row.update(self.sample_metadata(count))
         self.diagnostic_rows.append(row)
         
         self.status.setText(

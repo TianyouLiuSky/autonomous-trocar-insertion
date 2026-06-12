@@ -189,6 +189,17 @@ That workflow independently estimates camera rotation from spatial and
 orientation motion, audits FrameEE quaternion conventions, and explains how to
 run a dedicated D405 intrinsic calibration.
 
+To test whether the robot's reported XYZ axes physically align with the
+orientation-derived base frame, use:
+
+```text
+AXIS_ALIGNMENT_README.md
+```
+
+That workflow performs isolated positive and negative X/Y/Z movements,
+brackets every movement with center captures, and reports X/Z cross-axis
+motion directly.
+
 The older `run_validation_24mm.py` sequence below changes XYZ and roll/pitch
 together. Keep it only for reproducing earlier combined-validation experiments;
 do not use it to diagnose whether an error is caused by position or orientation.

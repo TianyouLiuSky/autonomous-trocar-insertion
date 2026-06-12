@@ -93,6 +93,22 @@ python3 collect_axis_alignment_data.py \
   --require-fitted-intrinsics
 ```
 
+`TIMESTAMP` is a placeholder in this README. Do not type it literally. Use the
+actual JSON path printed by `run_axis_alignment_poses.py`, for example:
+
+```text
+output/axis_alignment_sequence_20260612_153045.json
+```
+
+With the current collector, `--sequence` may also be omitted to select the
+newest generated sequence automatically:
+
+```bash
+python3 collect_axis_alignment_data.py \
+  --intrinsics "$INTRINSICS" \
+  --require-fitted-intrinsics
+```
+
 Confirm that the collector displays `FITTED` and that the board is detected.
 The top status line shows the exact next label, such as:
 

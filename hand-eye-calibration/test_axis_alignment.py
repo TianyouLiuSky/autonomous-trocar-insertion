@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """Synthetic regression tests for the axis-alignment analyzer."""
 
+import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
 from analyze_axis_alignment import analyze_displacements
+from translation_axis_correction import (
+    correct_translation,
+    load_translation_axis_correction,
+)
 
 
 def rotation_y(angle_deg):
@@ -55,6 +61,41 @@ class AxisAlignmentTest(unittest.TestCase):
             15.5, places=6)
         self.assertLess(
             result["translation_fit_residual_max_mm"], 1e-9)
+        np.testing.assert_allclose(
+            result["reported_translation_to_orientation_base"],
+            basis_tilt,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            correct_translation(
+                np.array([0.010, 0.0, 0.0]),
+                result["reported_translation_to_orientation_base"],
+            ),
+            basis_tilt @ np.array([0.010, 0.0, 0.0]),
+            atol=1e-12,
+        )
+
+    def test_correction_artifact_round_trip(self):
+        expected = rotation_y(-15.5)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "correction.npz"
+            np.savez(
+                str(path),
+                correction_version=1,
+                reported_translation_to_orientation_base=expected,
+                axis_dataset="axis.npz",
+                orientation_dataset="orientation.npz",
+                translation_fit_residual_mean_mm=0.149,
+                translation_fit_residual_max_mm=0.299,
+            )
+            loaded = load_translation_axis_correction(path)
+
+        np.testing.assert_allclose(
+            loaded["matrix"], expected, atol=1e-12)
+        self.assertAlmostEqual(loaded["angle_deg"], 15.5, places=6)
+        self.assertEqual(loaded["axis_dataset"], "axis.npz")
+        self.assertEqual(
+            loaded["orientation_dataset"], "orientation.npz")
 
 
 if __name__ == "__main__":

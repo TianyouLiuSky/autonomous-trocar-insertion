@@ -33,6 +33,10 @@ from handeye_math import (
     solve_translations,
     transforms_from_samples,
 )
+from translation_axis_correction import (
+    corrected_robot_pose,
+    load_translation_axis_correction,
+)
 
 from PyQt5.QtCore    import Qt, QTimer
 from PyQt5.QtGui     import QImage, QPixmap, QKeySequence
@@ -238,14 +242,19 @@ class RobotTracker(object):
 # Calibration engine
 # ─────────────────────────────────────────────────────────────────────────────
 class HandEyeCalibrator(object):
-    def __init__(self):
+    def __init__(self, translation_correction=None):
+        self.translation_correction = translation_correction
+        self._clear_samples()
+
+    def _clear_samples(self):
         self.robot_poses = []
+        self.raw_robot_poses = []
         self.board_rvecs = []
         self.board_tvecs = []
         self._poses_log  = []   # flat rows for CSV
 
     def reset(self):
-        self.__init__()
+        self._clear_samples()
 
     def add_sample(self, robot_pose, rvec, tvec, stamp=None):
         R_board, _ = cv2.Rodrigues(rvec)
@@ -253,10 +262,21 @@ class HandEyeCalibrator(object):
         if not is_diverse and len(self.robot_poses) > 0:
             return False, min_angle, closest_sample
 
-        self.robot_poses.append(robot_pose)
+        raw_robot_pose = {
+            "t": np.asarray(robot_pose["t"], dtype=float).copy(),
+            "t_mm": np.asarray(robot_pose["t_mm"], dtype=float).copy(),
+            "q": np.asarray(robot_pose["q"], dtype=float).copy(),
+        }
+        corrected_pose = raw_robot_pose
+        if self.translation_correction is not None:
+            corrected_pose = corrected_robot_pose(
+                raw_robot_pose, self.translation_correction["matrix"])
+        self.raw_robot_poses.append(raw_robot_pose)
+        self.robot_poses.append(corrected_pose)
         self.board_rvecs.append(rvec.copy())
         self.board_tvecs.append(tvec.copy())
-        euler = Rotation.from_quat(robot_pose['q']).as_euler('xyz', degrees=True)
+        euler = Rotation.from_quat(
+            corrected_pose['q']).as_euler('xyz', degrees=True)
         board_euler = Rotation.from_matrix(R_board).as_euler('xyz', degrees=True)
         ros_secs  = stamp.secs  if stamp is not None else 0
         ros_nsecs = stamp.nsecs if stamp is not None else 0
@@ -266,13 +286,16 @@ class HandEyeCalibrator(object):
             'ros_secs':      ros_secs,
             'ros_nsecs':     ros_nsecs,
             'ros_t_sec':     round(ros_secs + ros_nsecs * 1e-9, 6),
-            'rob_tx_mm':     round(robot_pose['t_mm'][0], 4),
-            'rob_ty_mm':     round(robot_pose['t_mm'][1], 4),
-            'rob_tz_mm':     round(robot_pose['t_mm'][2], 4),
-            'rob_qx':        round(robot_pose['q'][0], 6),
-            'rob_qy':        round(robot_pose['q'][1], 6),
-            'rob_qz':        round(robot_pose['q'][2], 6),
-            'rob_qw':        round(robot_pose['q'][3], 6),
+            'raw_rob_tx_mm': round(raw_robot_pose['t_mm'][0], 4),
+            'raw_rob_ty_mm': round(raw_robot_pose['t_mm'][1], 4),
+            'raw_rob_tz_mm': round(raw_robot_pose['t_mm'][2], 4),
+            'rob_tx_mm':     round(corrected_pose['t_mm'][0], 4),
+            'rob_ty_mm':     round(corrected_pose['t_mm'][1], 4),
+            'rob_tz_mm':     round(corrected_pose['t_mm'][2], 4),
+            'rob_qx':        round(corrected_pose['q'][0], 6),
+            'rob_qy':        round(corrected_pose['q'][1], 6),
+            'rob_qz':        round(corrected_pose['q'][2], 6),
+            'rob_qw':        round(corrected_pose['q'][3], 6),
             'rob_roll_deg':  round(euler[0], 4),
             'rob_pitch_deg': round(euler[1], 4),
             'rob_yaw_deg':   round(euler[2], 4),
@@ -572,7 +595,7 @@ class HandEyeCalibrator(object):
 # ─────────────────────────────────────────────────────────────────────────────
 class MainWindow(QMainWindow):
 
-    def __init__(self, intrinsics_path=None):
+    def __init__(self, intrinsics_path=None, translation_correction=None):
         super(MainWindow, self).__init__()
         self.setWindowTitle("ATI  |  Hand-Eye Calibration")
         self.setStyleSheet(GLOBAL_STYLE)
@@ -581,13 +604,25 @@ class MainWindow(QMainWindow):
         self._cam     = D405Camera(intrinsics_path)
         self._det     = ChArUcoDetector()
         self._tracker = RobotTracker()
-        self._cal     = HandEyeCalibrator()
+        self._translation_correction = translation_correction
+        self._cal     = HandEyeCalibrator(translation_correction)
 
         self._anchor  = None
         self._result  = None
         self._partial_warned = False
 
         self._build_ui()
+        if self._translation_correction is not None:
+            correction = self._translation_correction
+            self._log_msg(
+                "Translation-axis correction ACTIVE: {:.3f} deg".format(
+                    correction["angle_deg"]))
+            self._log_msg(
+                "Correction source: {}".format(correction["path"]))
+            self._log_msg(
+                "Raw FrameEE XYZ is corrected only for calibration math; "
+                "robot motion is unchanged."
+            )
         QShortcut(QKeySequence("Space"), self, activated=self._record)
 
         self._disp_timer = QTimer()
@@ -867,7 +902,41 @@ class MainWindow(QMainWindow):
                  multistart_camera_translation_spread_mm=
                      self._result[
                          'multistart_camera_translation_spread_mm'],
-                 n_samples=self._result['n'])
+                 n_samples=self._result['n'],
+                 robot_poses=np.asarray(
+                     self._cal.robot_poses, dtype=object),
+                 raw_robot_poses=np.asarray(
+                     self._cal.raw_robot_poses, dtype=object),
+                 board_rvecs=np.asarray(self._cal.board_rvecs),
+                 board_tvecs=np.asarray(self._cal.board_tvecs),
+                 translation_axis_correction_applied=
+                     self._translation_correction is not None,
+                 reported_translation_to_orientation_base=(
+                     np.eye(3)
+                     if self._translation_correction is None
+                     else self._translation_correction["matrix"]),
+                 translation_axis_correction_source=(
+                     ""
+                     if self._translation_correction is None
+                     else self._translation_correction["path"]),
+                 translation_axis_correction_angle_deg=(
+                     0.0
+                     if self._translation_correction is None
+                     else self._translation_correction["angle_deg"]),
+                 translation_axis_correction_axis_dataset=(
+                     ""
+                     if self._translation_correction is None
+                     else self._translation_correction["axis_dataset"]),
+                 translation_axis_correction_orientation_dataset=(
+                     ""
+                     if self._translation_correction is None
+                     else self._translation_correction[
+                         "orientation_dataset"]),
+                 translation_axis_correction_origin_offset_known=False,
+                 robot_translation_convention=(
+                     "raw_frameee"
+                     if self._translation_correction is None
+                     else "orientation_aligned_axes_unknown_origin_offset"))
         self._log_msg("v Saved -> {}".format(path))
         self._err_lbl.setText("v Saved: {}".format(os.path.basename(path)))
 
@@ -965,13 +1034,32 @@ def _parse_args():
             "intrinsics; may also be set with HE_CAMERA_INTRINSICS."
         ),
     )
+    parser.add_argument(
+        "--translation-axis-correction",
+        default=os.environ.get("HE_TRANSLATION_AXIS_CORRECTION"),
+        help=(
+            "Optional translation_axis_correction_*.npz produced by "
+            "analyze_axis_alignment.py. It corrects FrameEE XYZ only for "
+            "the hand-eye solve; robot commands are not changed."
+        ),
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
+    translation_correction = None
+    if args.translation_axis_correction:
+        translation_correction = load_translation_axis_correction(
+            args.translation_axis_correction)
+        print(
+            "Translation-axis correction ACTIVE: {:.3f} deg\n{}".format(
+                translation_correction["angle_deg"],
+                translation_correction["matrix"],
+            )
+        )
     rospy.init_node('ati_he_calibration', anonymous=True)
     app = QApplication.instance() or QApplication([sys.argv[0]])
-    win = MainWindow(args.intrinsics)
+    win = MainWindow(args.intrinsics, translation_correction)
     win.show()
     sys.exit(app.exec_())

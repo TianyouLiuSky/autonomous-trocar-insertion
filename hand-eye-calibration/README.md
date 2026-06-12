@@ -200,6 +200,27 @@ That workflow performs isolated positive and negative X/Y/Z movements,
 brackets every movement with center captures, and reports X/Z cross-axis
 motion directly.
 
+The axis test has confirmed that this robot's reported FrameEE XYZ basis is
+rotated by approximately `15.5 deg` around Y relative to the base frame implied
+by its quaternion. `AXIS_ALIGNMENT_README.md` documents the evidence and the
+opt-in processing experiment. The correction workflow is:
+
+```bash
+python3 analyze_axis_alignment.py \
+  --axis-data output/axis_alignment_dataset_TIMESTAMP.npz \
+  --orientation output/validation_dataset_orientation_TIMESTAMP.npz
+
+CORRECTION=$(ls -1t output/translation_axis_correction_*.npz | head -n 1)
+
+python3 handeye_calibration.py \
+  --intrinsics "$INTRINSICS" \
+  --translation-axis-correction "$CORRECTION"
+```
+
+This correction affects calibration and evaluation math only. It does not
+change robot motion commands. A new calibration must be solved with the
+correction active; do not rotate an old final calibration matrix afterward.
+
 The older `run_validation_24mm.py` sequence below changes XYZ and roll/pitch
 together. Keep it only for reproducing earlier combined-validation experiments;
 do not use it to diagnose whether an error is caused by position or orientation.

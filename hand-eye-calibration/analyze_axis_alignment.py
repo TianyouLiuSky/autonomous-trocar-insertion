@@ -113,6 +113,13 @@ def analyze_displacements(movements, orientation_camera_rotation):
         translation_rotation @ orientation_camera_rotation.T
     )
     disagreement_axis, disagreement_deg = rotation_axis_angle(disagreement)
+    # FrameEE rotation already uses the orientation-defined base. This matrix
+    # converts the separately reported XYZ components into that same base.
+    reported_to_orientation_base = project_to_rotation(
+        orientation_camera_rotation @ translation_rotation.T
+    )
+    correction_axis, correction_deg = rotation_axis_angle(
+        reported_to_orientation_base)
     predicted_robot = (
         translation_rotation @ np.asarray(camera_vectors).T
     ).T
@@ -167,6 +174,10 @@ def analyze_displacements(movements, orientation_camera_rotation):
         "translation_camera_rotation": translation_rotation,
         "translation_vs_orientation_axis": disagreement_axis,
         "translation_vs_orientation_deg": disagreement_deg,
+        "reported_translation_to_orientation_base":
+            reported_to_orientation_base,
+        "correction_axis": correction_axis,
+        "correction_angle_deg": correction_deg,
         "translation_fit_residual_mean_mm": float(
             np.mean(translation_fit_residual_mm)),
         "translation_fit_residual_max_mm": float(
@@ -339,6 +350,8 @@ def write_results(result, axis_path, orientation_path, axis_data,
     stamp = timestamp()
     csv_path = output_dir / "axis_alignment_residuals_{}.csv".format(stamp)
     json_path = output_dir / "axis_alignment_summary_{}.json".format(stamp)
+    correction_path = (
+        output_dir / "translation_axis_correction_{}.npz".format(stamp))
 
     csv_rows = []
     for row in result["rows"]:
@@ -396,7 +409,25 @@ def write_results(result, axis_path, orientation_path, axis_data,
     }
     with json_path.open("w") as handle:
         json.dump(summary, handle, indent=2)
-    return csv_path, json_path
+    np.savez(
+        str(correction_path),
+        correction_version=1,
+        reported_translation_to_orientation_base=
+            result["reported_translation_to_orientation_base"],
+        correction_angle_deg=result["correction_angle_deg"],
+        correction_axis=result["correction_axis"],
+        translation_fit_residual_mean_mm=
+            result["translation_fit_residual_mean_mm"],
+        translation_fit_residual_max_mm=
+            result["translation_fit_residual_max_mm"],
+        axis_dataset=str(axis_path),
+        orientation_dataset=str(orientation_path),
+        axis_intrinsics_source=axis_data["intrinsics_source"],
+        orientation_intrinsics_source=
+            orientation_reference["intrinsics_source"],
+        diagnostic_only=True,
+    )
+    return csv_path, json_path, correction_path
 
 
 def parse_args():
@@ -529,6 +560,18 @@ def main():
         )
     )
     print(
+        "Correction (reported XYZ -> orientation base): "
+        "{:.3f} deg around axis {}".format(
+            result["correction_angle_deg"],
+            np.round(result["correction_axis"], 4).tolist(),
+        )
+    )
+    print(np.array2string(
+        result["reported_translation_to_orientation_base"],
+        precision=6,
+        suppress_small=True,
+    ))
+    print(
         "Translation-only fit residual mean/max: {:.3f}/{:.3f} mm"
         .format(
             result["translation_fit_residual_mean_mm"],
@@ -546,7 +589,7 @@ def main():
         "Orientation drift board mean/max: {:.3f}/{:.3f} deg".format(
             np.mean(board_drift), np.max(board_drift)))
 
-    csv_path, json_path = write_results(
+    csv_path, json_path, correction_path = write_results(
         result,
         axis_path,
         orientation_path,
@@ -557,6 +600,11 @@ def main():
     print("\nSaved:")
     print("  {}".format(json_path))
     print("  {}".format(csv_path))
+    print("  {}".format(correction_path))
+    print(
+        "\nThe correction file is for hand-eye processing only. "
+        "Do not apply it to robot motion commands."
+    )
 
 
 if __name__ == "__main__":

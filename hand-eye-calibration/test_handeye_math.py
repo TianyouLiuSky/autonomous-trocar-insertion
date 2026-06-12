@@ -11,6 +11,7 @@ from handeye_math import (
     rotation_angle_deg,
     solve_translations,
 )
+from translation_axis_correction import correct_translation
 
 
 def euler_xyz_matrix(angles_deg):
@@ -138,6 +139,37 @@ class HandEyeMathTest(unittest.TestCase):
         self.assertLess(
             np.max(np.linalg.norm(result["residuals"], axis=1)),
             1e-10,
+        )
+
+    def test_axis_correction_restores_translation_solve(self):
+        robot_r, physical_robot_t, _, board_t = self.make_samples()
+        reported_to_orientation_base = euler_xyz_matrix(
+            [0.0, -15.5, 0.0])
+        reported_robot_t = np.array([
+            reported_to_orientation_base.T @ translation
+            for translation in physical_robot_t
+        ])
+        corrected_robot_t = np.array([
+            correct_translation(
+                translation, reported_to_orientation_base)
+            for translation in reported_robot_t
+        ])
+
+        result = solve_translations(
+            robot_r,
+            corrected_robot_t,
+            board_t,
+            self.camera_rotation,
+        )
+        np.testing.assert_allclose(
+            result["board_translation"],
+            self.board_translation,
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            result["camera_translation"],
+            self.camera_translation,
+            atol=1e-10,
         )
 
 

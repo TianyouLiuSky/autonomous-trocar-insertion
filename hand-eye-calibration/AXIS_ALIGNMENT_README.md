@@ -234,3 +234,176 @@ The decisive result is the comparison between:
 If these differ by about 15.6 degrees again, the inconsistency exists upstream
 of hand-eye solver weighting. If they agree within 1 degree, the previous
 spatial dataset or its motion design should be investigated instead.
+
+## Confirmed Robot Finding
+
+The June 12, 2026 axis test measured:
+
+- reported X direction error: `15.975 deg`
+- reported Y direction error: `1.038 deg`
+- reported Z direction error: `15.424 deg`
+- translation/orientation basis disagreement: `15.525 deg` about Y
+- translation-only residual: `0.149 mm` mean, `0.299 mm` max
+- robot orientation drift: at most `0.001 deg`
+- ChArUco reprojection error: `0.175 px` mean
+
+This is a coordinate-basis error, not a constant 15 mm position offset.
+FrameEE translation and FrameEE rotation do not behave as components of the
+same base coordinate frame.
+
+For a valid rigid transform, the translation vector and rotation matrix must
+both be expressed relative to the same parent frame. In this robot's output:
+
+- the quaternion is internally consistent with observed rotational motion,
+- XYZ is internally consistent with observed translational motion,
+- but the XYZ basis is rotated by approximately `15.5 deg` around Y relative
+  to the base frame implied by the quaternion.
+
+The measured direction matrix was approximately:
+
+```text
+[[ 0.9614,  0.0169, -0.2652],
+ [-0.0035,  0.9998,  0.0201],
+ [ 0.2752, -0.0065,  0.9640]]
+```
+
+Therefore, a reported `+10 mm` X move physically appears as approximately
+`[+9.61, -0.03, +2.75] mm` in the orientation-defined base. A reported
+`+10 mm` Z move appears as approximately `[-2.65, +0.20, +9.64] mm`. Y is
+nearly aligned.
+
+This explains the earlier X/Z residual pattern. Over a 10 mm move, a
+15.5-degree axis error creates about 2.7 mm of cross-axis displacement. It also
+explains why solver weights traded translation quality against rotation
+quality: no single pair of rigid transforms can exactly satisfy `A Y = X B`
+when the rotation and translation inside `A` use different base frames.
+
+The experiments rule out the following as the primary cause:
+
+- ChArUco image noise or D405 repeatability
+- fitted versus factory intrinsics
+- quaternion `x,y,z,w` ordering
+- quaternion inversion
+- robot/camera capture timing mismatch
+- insufficient solver weighting
+- failure to reach requested poses, because recorded actual poses were used
+
+The exact robot-source defect is not yet proven. Plausible locations are the
+EyeRobot 2.0 forward-kinematics axis definition, a missing fixed base-frame
+rotation on translation, or a machine-specific kinematic calibration. The
+robot UI matching FrameEE is not an independent validation because both may
+display the same computed pose.
+
+## Experimental Processing Correction
+
+`analyze_axis_alignment.py` now saves an orthonormal correction artifact:
+
+```text
+output/translation_axis_correction_TIMESTAMP.npz
+```
+
+The matrix maps:
+
+```text
+reported FrameEE XYZ -> orientation-defined robot base XYZ
+```
+
+It is derived from the axis and orientation datasets. It is not a hard-coded
+15.5-degree rotation.
+
+The axis experiment measures directions and therefore determines the basis
+rotation, but it cannot determine a constant offset between the two coordinate
+origins. This does not affect calibration residuals: a constant base-origin
+offset is absorbed into the solved camera translation. Consequently, the
+corrected `T_cam2base` is expressed in a coordinate convention with
+orientation-aligned axes but an origin whose physical offset has not been
+independently measured.
+
+First rerun the analyzer on the confirmed datasets:
+
+```bash
+python3 analyze_axis_alignment.py \
+  --axis-data output/axis_alignment_dataset_20260612_124957.npz \
+  --orientation output/validation_dataset_orientation_20260610_152128.npz
+```
+
+Select the newly written correction:
+
+```bash
+CORRECTION=$(ls -1t output/translation_axis_correction_*.npz | head -n 1)
+test -f "$CORRECTION" && echo "Using $CORRECTION"
+```
+
+Then start a new calibration GUI with both fitted intrinsics and the correction:
+
+```bash
+python3 handeye_calibration.py \
+  --intrinsics "$INTRINSICS" \
+  --translation-axis-correction "$CORRECTION"
+```
+
+The GUI log must display:
+
+```text
+Translation-axis correction ACTIVE
+```
+
+Run `run_calibration_poses.py` normally in the other terminal. The correction
+does not alter robot targets or commands. It changes only the FrameEE XYZ
+vectors supplied to the hand-eye solver. Quaternions are unchanged.
+
+After computing and saving, the calibration NPZ records:
+
+- raw FrameEE poses
+- corrected solver poses
+- board poses
+- the exact correction matrix and its source
+
+Existing calibration NPZ files created before this update cannot be repaired by
+rotating `T_cam2base` afterward. Their transforms were already optimized using
+incompatible pose components. Collect and solve a new 20-pose calibration with
+the correction active. Existing validation datasets may be reused because they
+contain raw FrameEE poses.
+
+Evaluate a corrected calibration against the existing decoupled datasets:
+
+```bash
+CALIBRATION=$(ls -1t output/hand_eye_cal_*.npz | head -n 1)
+
+python3 evaluate_calibration.py \
+  --calib "$CALIBRATION" \
+  --validation output/validation_dataset_spatial_20260610_151041.npz \
+  --solution weighted \
+  --no-show
+
+python3 evaluate_calibration.py \
+  --calib "$CALIBRATION" \
+  --validation output/validation_dataset_orientation_20260610_152128.npz \
+  --solution weighted \
+  --no-show
+```
+
+`evaluate_calibration.py` detects the correction metadata in the calibration
+file and applies the same matrix to validation FrameEE translations
+automatically. Its console output must say:
+
+```text
+Translation-axis correction: ACTIVE
+```
+
+Any later program using the corrected `T_cam2base` must also convert incoming
+raw FrameEE XYZ with the saved correction matrix. Mixing a corrected camera
+transform with raw FrameEE translations recreates the same inconsistency.
+Quaternions must not be rotated by this correction.
+
+Treat this as an experimental software correction until it passes validation.
+Do not apply the matrix to robot motion commands. Re-run the axis test after
+robot firmware, homing, linkage calibration, or kinematic configuration
+changes, because those may change the measured basis relationship.
+
+Suggested acceptance criteria:
+
+- spatial validation mean translation error below `1 mm`
+- orientation validation mean rotation error below `0.25 deg`
+- no coherent X/Z swirl in the spatial residual map
+- repeated corrected calibrations give comparable transforms and residuals

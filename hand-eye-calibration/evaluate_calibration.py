@@ -7,6 +7,7 @@ import csv
 import glob
 import os
 from datetime import datetime
+from translation_axis_correction import correct_translation
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -91,7 +92,47 @@ def evaluate_and_plot(
             if "camera_intrinsics_source" in calib_data
             else "not recorded"
         )
+        translation_correction_applied = (
+            bool(calib_data[
+                "translation_axis_correction_applied"].item())
+            if "translation_axis_correction_applied" in calib_data
+            else False
+        )
+        if (
+                translation_correction_applied
+                and "reported_translation_to_orientation_base"
+                not in calib_data):
+            raise ValueError(
+                "Calibration says translation-axis correction was applied "
+                "but does not contain its correction matrix"
+            )
+        translation_correction = (
+            np.asarray(
+                calib_data[
+                    "reported_translation_to_orientation_base"],
+                dtype=float,
+            ).reshape(3, 3)
+            if translation_correction_applied
+            and "reported_translation_to_orientation_base" in calib_data
+            else np.eye(3)
+        )
+        translation_correction_source = (
+            str(calib_data[
+                "translation_axis_correction_source"].item())
+            if translation_correction_applied
+            and "translation_axis_correction_source" in calib_data
+            else ""
+        )
         print(f"Loaded {solution} calibration: {calib_npz_path}")
+        if translation_correction_applied:
+            print(
+                "Translation-axis correction: ACTIVE (validation FrameEE "
+                "XYZ will be converted before evaluation)"
+            )
+            print(
+                "Translation-axis correction source: {}".format(
+                    translation_correction_source or "not recorded")
+            )
     except Exception as e:
         print(f"Failed to load calibration file: {e}")
         return
@@ -157,9 +198,13 @@ def evaluate_and_plot(
     # 3. Compute Residuals for AY = XB
     for i, (r_pose, b_rvec, b_tvec) in enumerate(zip(robot_poses, board_rvecs, board_tvecs), start=1):
         # Construct Matrix A (Robot Kinematics)
+        raw_robot_translation = np.asarray(
+            r_pose['t'], dtype=float).reshape(3)
+        robot_translation = correct_translation(
+            raw_robot_translation, translation_correction)
         T_A = np.eye(4)
         T_A[:3, :3] = Rotation.from_quat(r_pose['q']).as_matrix()
-        T_A[:3, 3] = r_pose['t']
+        T_A[:3, 3] = robot_translation
 
         # Construct Matrix B (Vision)
         T_B = np.eye(4)
@@ -204,9 +249,15 @@ def evaluate_and_plot(
             "board_camera_x_mm": round(float(board_base_camera_mm[0]), 6),
             "board_camera_y_mm": round(float(board_base_camera_mm[1]), 6),
             "board_camera_z_mm": round(float(board_base_camera_mm[2]), 6),
-            "robot_x_mm": round(float(r_pose['t'][0] * 1000), 6),
-            "robot_y_mm": round(float(r_pose['t'][1] * 1000), 6),
-            "robot_z_mm": round(float(r_pose['t'][2] * 1000), 6),
+            "robot_x_mm": round(float(robot_translation[0] * 1000), 6),
+            "robot_y_mm": round(float(robot_translation[1] * 1000), 6),
+            "robot_z_mm": round(float(robot_translation[2] * 1000), 6),
+            "raw_robot_x_mm": round(
+                float(raw_robot_translation[0] * 1000), 6),
+            "raw_robot_y_mm": round(
+                float(raw_robot_translation[1] * 1000), 6),
+            "raw_robot_z_mm": round(
+                float(raw_robot_translation[2] * 1000), 6),
             "robot_roll_deg": round(float(robot_rpy[0]), 6),
             "robot_pitch_deg": round(float(robot_rpy[1]), 6),
             "robot_yaw_deg": round(float(robot_rpy[2]), 6),
@@ -352,6 +403,8 @@ def evaluate_and_plot(
         "max_rotation_error_deg": float(np.max(r_mags)),
         "solution": solution,
         "validation_mode": validation_mode,
+        "translation_axis_correction_applied":
+            translation_correction_applied,
         "residual_csv": csv_path,
         "plot": save_filename,
     }

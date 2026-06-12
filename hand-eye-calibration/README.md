@@ -221,6 +221,72 @@ This correction affects calibration and evaluation math only. It does not
 change robot motion commands. A new calibration must be solved with the
 correction active; do not rotate an old final calibration matrix afterward.
 
+## Promote a Validated Calibration
+
+After corrected spatial and orientation validation both pass, freeze the exact
+calibration, correction, fitted intrinsics, solver settings, and validation
+evidence into one non-destructive bundle:
+
+```bash
+python3 package_handeye_calibration.py \
+  --calibration output/hand_eye_cal_TIMESTAMP.npz \
+  --spatial-residuals \
+    output/validation_residuals_weighted_spatial_TIMESTAMP.csv \
+  --orientation-residuals \
+    output/validation_residuals_weighted_orientation_TIMESTAMP.csv \
+  --spatial-plot \
+    output/spatial_error_map_weighted_spatial_TIMESTAMP.png \
+  --orientation-plot \
+    output/orientation_error_map_weighted_orientation_TIMESTAMP.png \
+  --name sher20_d405_validated_YYYYMMDD \
+  --activate
+```
+
+`TIMESTAMP` is a placeholder. Use the exact filenames printed by calibration
+and evaluation. If all relevant files are the newest outputs, the shorter
+command is:
+
+```bash
+python3 package_handeye_calibration.py \
+  --name sher20_d405_validated_YYYYMMDD \
+  --activate
+```
+
+The script verifies that:
+
+- translation-axis correction was active during calibration,
+- the correction and intrinsics match the matrices embedded in calibration,
+- spatial translation validation is below `1 mm` mean and max,
+- orientation rotation validation is below `0.25 deg` mean and `0.5 deg` max.
+
+It copies rather than moves the source files into:
+
+```text
+calibration_bundles/sher20_d405_validated_YYYYMMDD/
+```
+
+Stable names in that folder include:
+
+```text
+hand_eye_calibration.npz
+translation_axis_correction.npz
+camera_intrinsics.npz
+validation_spatial_residuals.csv
+validation_orientation_residuals.csv
+manifest.json
+README.md
+```
+
+With `--activate`, `calibration_bundles/current` points to the newly packaged
+bundle.
+
+Keep the fitted intrinsics in the validated bundle. Intrinsics were not the
+primary cause of the old 2-3 mm error, but this successful calibration and its
+axis correction were solved and validated with that exact fitted camera model.
+Switching to factory intrinsics creates a different calibration configuration
+and requires a new calibration plus both validation tests. Do not remove the
+fitted intrinsics merely to simplify deployment.
+
 The older `run_validation_24mm.py` sequence below changes XYZ and roll/pitch
 together. Keep it only for reproducing earlier combined-validation experiments;
 do not use it to diagnose whether an error is caused by position or orientation.

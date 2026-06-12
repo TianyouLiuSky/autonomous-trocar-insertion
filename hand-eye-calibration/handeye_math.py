@@ -144,6 +144,120 @@ def estimate_camera_rotation_from_translations(
     }
 
 
+def estimate_camera_rotation_from_orientation_arc(
+        robot_rotations, robot_translations, board_translations,
+        initial_rotations):
+    """Fit camera rotation from board-center motion during pure rotation.
+
+    The board center is offset from the end-effector origin, so an orientation
+    sweep traces an arc even when the reported robot XYZ remains fixed. This
+    fits that arc without requiring a physical pivot constraint.
+    """
+    from scipy.optimize import least_squares
+
+    robot_rotations = np.asarray(robot_rotations, dtype=float)
+    robot_translations = np.asarray(robot_translations, dtype=float)
+    board_translations = np.asarray(board_translations, dtype=float)
+    if len(robot_rotations) < 4:
+        raise ValueError("At least four orientation samples are required")
+
+    def evaluate(rotation_vector):
+        camera_rotation = rotation_matrix_from_rotvec(rotation_vector)
+        translation_fit = solve_translations(
+            robot_rotations,
+            robot_translations,
+            board_translations,
+            camera_rotation,
+        )
+        board_offset = translation_fit["board_translation"]
+        camera_translation = translation_fit["camera_translation"]
+        robot_board_centers = (
+            robot_translations
+            + np.einsum("nij,j->ni", robot_rotations, board_offset)
+        )
+        camera_board_centers = (
+            np.einsum(
+                "ij,nj->ni", camera_rotation, board_translations)
+            + camera_translation
+        )
+        residuals = camera_board_centers - robot_board_centers
+        return residuals, translation_fit
+
+    starts = [
+        rotation_vector_from_matrix(rotation)
+        for rotation in initial_rotations
+    ]
+    starts.append(np.zeros(3))
+    candidates = []
+    for start_index, start in enumerate(starts):
+        solution = least_squares(
+            lambda value: evaluate(value)[0].reshape(-1),
+            start,
+            loss="linear",
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+            max_nfev=2000,
+        )
+        residuals, translation_fit = evaluate(solution.x)
+        candidates.append({
+            "start_index": start_index,
+            "solution": solution,
+            "rotation": rotation_matrix_from_rotvec(solution.x),
+            "residuals": residuals,
+            "translation_fit": translation_fit,
+            "cost": float(np.sum(residuals ** 2)),
+        })
+
+    best = min(candidates, key=lambda candidate: candidate["cost"])
+    solved_rotations = [
+        candidate["rotation"] for candidate in candidates
+        if candidate["solution"].success
+    ]
+    rotation_spread_deg = 0.0
+    for i in range(len(solved_rotations)):
+        for j in range(i + 1, len(solved_rotations)):
+            rotation_spread_deg = max(
+                rotation_spread_deg,
+                rotation_angle_deg(
+                    solved_rotations[i] @ solved_rotations[j].T),
+            )
+
+    jacobian = best["solution"].jac
+    jacobian_condition = (
+        float(np.linalg.cond(jacobian))
+        if jacobian.size else float("inf")
+    )
+    translation_fit = best["translation_fit"]
+    board_offset = translation_fit["board_translation"]
+    camera_translation = translation_fit["camera_translation"]
+    robot_board_centers = (
+        robot_translations
+        + np.einsum("nij,j->ni", robot_rotations, board_offset)
+    )
+    camera_board_centers = (
+        np.einsum(
+            "ij,nj->ni", best["rotation"], board_translations)
+        + camera_translation
+    )
+    return {
+        "rotation": best["rotation"],
+        "board_offset": board_offset,
+        "camera_translation": camera_translation,
+        "robot_board_centers": robot_board_centers,
+        "camera_board_centers": camera_board_centers,
+        "residuals": best["residuals"],
+        "jacobian_condition": jacobian_condition,
+        "translation_condition_number":
+            translation_fit["condition_number"],
+        "translation_rank": translation_fit["rank"],
+        "successful_starts": sum(
+            candidate["solution"].success for candidate in candidates),
+        "requested_starts": len(candidates),
+        "rotation_spread_deg": rotation_spread_deg,
+    }
+
+
 def estimate_rotations_from_relative_motion(
         robot_rotations, board_rotations):
     """Estimate R_board2gripper and R_cam2base from rotational motion."""

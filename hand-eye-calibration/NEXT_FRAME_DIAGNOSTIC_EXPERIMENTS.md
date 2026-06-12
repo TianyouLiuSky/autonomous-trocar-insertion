@@ -508,6 +508,50 @@ axes and published orientation axes define the same base coordinate system.
 Do not change quaternion order or invert the quaternion based on the current
 diagnostic: those hypotheses were substantially worse than standard `xyzw`.
 
+## Experiment 7: No-Contact Board-Center Arc Test
+
+If a physical pivot test is incompatible with force control, rerun the updated
+frame-consistency diagnostic on the existing fitted-intrinsics datasets:
+
+```bash
+python3 diagnose_frame_consistency.py \
+  --spatial output/validation_dataset_spatial_FITTED_TIME.npz \
+  --orientation output/validation_dataset_orientation_FITTED_TIME.npz
+```
+
+No new captures are required. During the orientation sweep, FrameEE XYZ stays
+nearly fixed, but the board center moves because it has a physical offset from
+the end-effector origin. The diagnostic fits this board-center arc using:
+
+- FrameEE rotations,
+- FrameEE translations,
+- ChArUco translations,
+- an unknown board-center offset solved from the data.
+
+It does not use ChArUco board rotations to estimate the arc rotation. Record:
+
+```text
+Orientation board-center arc residual mean/max:
+Fitted board-center offset in EE:
+Arc rotation vs spatial translation:
+Arc rotation vs orientation rotation:
+Optimization spread/condition:
+```
+
+Interpretation:
+
+| Arc result | Most likely area to investigate |
+| --- | --- |
+| Low residual; close to orientation rotation; far from spatial translation | FrameEE XYZ coordinate basis or spatial translation publication |
+| Low residual; close to spatial translation; far from orientation rotation | FrameEE orientation or ChArUco board-rotation pathway |
+| Close to both | Original disagreement should also be small; verify selected datasets |
+| Far from both or high residual | Board rigidity/model, synchronization, or insufficient arc conditioning |
+
+Compare the fitted board-center offset norm with a rough physical measurement
+from the reported end-effector/force-sensor origin to the board center. It does
+not need ruler-level precision, but a physically impossible value makes the arc
+fit suspect.
+
 ## Results to Return for Analysis
 
 For each factory and fitted run, keep:

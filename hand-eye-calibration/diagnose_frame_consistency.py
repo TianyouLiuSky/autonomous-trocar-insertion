@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from handeye_math import (
+    estimate_camera_rotation_from_orientation_arc,
     estimate_camera_rotation_from_translations,
     estimate_rotations_from_relative_motion,
     rotation_matrix_from_quaternion_xyzw,
@@ -144,7 +145,12 @@ def analyze(spatial_path, orientation_path, output_dir):
         np.linalg.norm(spatial_fit["residuals"], axis=1) * 1000.0
     )
 
-    _, _, orientation_board_rotations, _ = transforms_from_samples(
+    (
+        orientation_robot_rotations,
+        orientation_robot_translations,
+        orientation_board_rotations,
+        orientation_board_translations,
+    ) = transforms_from_samples(
         orientation_robot, orientation_rvecs, orientation_tvecs)
 
     hypothesis_results = []
@@ -182,6 +188,24 @@ def analyze(spatial_path, orientation_path, output_dir):
         ),
     )
     standard_fit = orientation_fits["xyzw"]
+    orientation_arc_fit = estimate_camera_rotation_from_orientation_arc(
+        orientation_robot_rotations,
+        orientation_robot_translations,
+        orientation_board_translations,
+        (
+            standard_fit["camera_rotation"],
+            spatial_fit["rotation"],
+        ),
+    )
+    orientation_arc_residual_mm = np.linalg.norm(
+        orientation_arc_fit["residuals"], axis=1) * 1000.0
+    arc_vs_spatial_axis, arc_vs_spatial_deg = rotation_axis_angle(
+        orientation_arc_fit["rotation"] @ spatial_fit["rotation"].T
+    )
+    arc_vs_rotation_axis, arc_vs_rotation_deg = rotation_axis_angle(
+        orientation_arc_fit["rotation"]
+        @ standard_fit["camera_rotation"].T
+    )
     spatial_identity = dataset_identity(
         spatial_path, len(spatial_robot))
     orientation_identity = dataset_identity(
@@ -194,6 +218,10 @@ def analyze(spatial_path, orientation_path, output_dir):
     )
     pairwise_csv = output_dir / (
         "frame_consistency_pairwise_rotations_{}.csv".format(stamp)
+    )
+    orientation_arc_csv = output_dir / (
+        "frame_consistency_orientation_arc_residuals_{}.csv".format(
+            stamp)
     )
     summary_path = output_dir / (
         "frame_consistency_summary_{}.json".format(stamp)
@@ -220,6 +248,28 @@ def analyze(spatial_path, orientation_path, output_dir):
         })
     write_csv(spatial_csv, spatial_rows)
     write_csv(pairwise_csv, standard_fit["pair_rows"])
+    orientation_arc_rows = []
+    for index, (
+            robot_center,
+            camera_center,
+            residual) in enumerate(zip(
+                orientation_arc_fit["robot_board_centers"],
+                orientation_arc_fit["camera_board_centers"],
+                orientation_arc_fit["residuals"]), start=1):
+        orientation_arc_rows.append({
+            "sample": index,
+            "robot_model_x_mm": robot_center[0] * 1000.0,
+            "robot_model_y_mm": robot_center[1] * 1000.0,
+            "robot_model_z_mm": robot_center[2] * 1000.0,
+            "camera_model_x_mm": camera_center[0] * 1000.0,
+            "camera_model_y_mm": camera_center[1] * 1000.0,
+            "camera_model_z_mm": camera_center[2] * 1000.0,
+            "residual_x_mm": residual[0] * 1000.0,
+            "residual_y_mm": residual[1] * 1000.0,
+            "residual_z_mm": residual[2] * 1000.0,
+            "residual_mm": np.linalg.norm(residual) * 1000.0,
+        })
+    write_csv(orientation_arc_csv, orientation_arc_rows)
 
     summary = {
         "spatial_dataset": str(spatial_path),
@@ -233,6 +283,39 @@ def analyze(spatial_path, orientation_path, output_dir):
             "max_residual_mm": float(np.max(spatial_residual_mm)),
             "camera_rotation": matrix_list(spatial_fit["rotation"]),
             "singular_values": spatial_fit["singular_values"].tolist(),
+        },
+        "orientation_arc_translation_fit": {
+            "mean_residual_mm":
+                float(np.mean(orientation_arc_residual_mm)),
+            "max_residual_mm":
+                float(np.max(orientation_arc_residual_mm)),
+            "camera_rotation":
+                matrix_list(orientation_arc_fit["rotation"]),
+            "board_center_offset_ee_mm": (
+                orientation_arc_fit["board_offset"] * 1000.0
+            ).tolist(),
+            "board_center_offset_norm_mm": float(
+                np.linalg.norm(orientation_arc_fit["board_offset"])
+                * 1000.0
+            ),
+            "arc_vs_spatial_translation_deg": arc_vs_spatial_deg,
+            "arc_vs_spatial_translation_axis":
+                arc_vs_spatial_axis.round(9).tolist(),
+            "arc_vs_orientation_rotation_deg": arc_vs_rotation_deg,
+            "arc_vs_orientation_rotation_axis":
+                arc_vs_rotation_axis.round(9).tolist(),
+            "jacobian_condition":
+                orientation_arc_fit["jacobian_condition"],
+            "translation_condition_number":
+                orientation_arc_fit["translation_condition_number"],
+            "translation_rank":
+                orientation_arc_fit["translation_rank"],
+            "successful_starts":
+                orientation_arc_fit["successful_starts"],
+            "requested_starts":
+                orientation_arc_fit["requested_starts"],
+            "rotation_spread_deg":
+                orientation_arc_fit["rotation_spread_deg"],
         },
         "intrinsics": {
             "spatial_source":
@@ -268,6 +351,7 @@ def analyze(spatial_path, orientation_path, output_dir):
         "artifacts": {
             "spatial_residual_csv": str(spatial_csv),
             "pairwise_rotation_csv": str(pairwise_csv),
+            "orientation_arc_residual_csv": str(orientation_arc_csv),
         },
     }
     with summary_path.open("w") as handle:
@@ -322,6 +406,42 @@ def analyze(spatial_path, orientation_path, output_dir):
         "  residual mean/max: {:.3f} / {:.3f} mm".format(
             np.mean(spatial_residual_mm), np.max(spatial_residual_mm))
     )
+    print("\nOrientation board-center arc fit (no physical pivot):")
+    print(
+        "  residual mean/max: {:.3f} / {:.3f} mm".format(
+            np.mean(orientation_arc_residual_mm),
+            np.max(orientation_arc_residual_mm),
+        )
+    )
+    print(
+        "  fitted board-center offset in EE: {} mm (norm {:.3f} mm)"
+        .format(
+            np.round(
+                orientation_arc_fit["board_offset"] * 1000.0, 3
+            ).tolist(),
+            np.linalg.norm(orientation_arc_fit["board_offset"]) * 1000.0,
+        )
+    )
+    print(
+        "  arc rotation vs spatial translation: {:.3f} deg axis={}"
+        .format(
+            arc_vs_spatial_deg,
+            np.round(arc_vs_spatial_axis, 4).tolist(),
+        )
+    )
+    print(
+        "  arc rotation vs orientation rotation: {:.3f} deg axis={}"
+        .format(
+            arc_vs_rotation_deg,
+            np.round(arc_vs_rotation_axis, 4).tolist(),
+        )
+    )
+    print(
+        "  optimization spread/condition: {:.6f} deg / {:.3g}".format(
+            orientation_arc_fit["rotation_spread_deg"],
+            orientation_arc_fit["jacobian_condition"],
+        )
+    )
     print("\nQuaternion/frame hypotheses:")
     for result in hypothesis_results:
         print(
@@ -352,6 +472,7 @@ def analyze(spatial_path, orientation_path, output_dir):
     print("  {}".format(summary_path))
     print("  {}".format(spatial_csv))
     print("  {}".format(pairwise_csv))
+    print("  {}".format(orientation_arc_csv))
     print("\nNo correction was applied or saved.")
     return summary
 

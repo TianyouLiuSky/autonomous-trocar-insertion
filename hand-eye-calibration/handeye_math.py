@@ -147,11 +147,11 @@ def estimate_camera_rotation_from_translations(
 def estimate_camera_rotation_from_orientation_arc(
         robot_rotations, robot_translations, board_translations,
         initial_rotations):
-    """Fit camera rotation from board-center motion during pure rotation.
+    """Fit camera rotation from board-frame-origin motion during rotation.
 
-    The board center is offset from the end-effector origin, so an orientation
-    sweep traces an arc even when the reported robot XYZ remains fixed. This
-    fits that arc without requiring a physical pivot constraint.
+    The ChArUco board origin is offset from the end-effector origin, so an
+    orientation sweep traces an arc even when the reported robot XYZ remains
+    fixed. This fits that arc without requiring a physical pivot constraint.
     """
     from scipy.optimize import least_squares
 
@@ -252,11 +252,11 @@ def estimate_camera_rotation_from_orientation_arc(
     translation_fit = best["translation_fit"]
     board_offset = translation_fit["board_translation"]
     camera_translation = translation_fit["camera_translation"]
-    robot_board_centers = (
+    robot_board_origins = (
         robot_translations
         + np.einsum("nij,j->ni", robot_rotations, board_offset)
     )
-    camera_board_centers = (
+    camera_board_origins = (
         np.einsum(
             "ij,nj->ni", best["rotation"], board_translations)
         + camera_translation
@@ -265,8 +265,8 @@ def estimate_camera_rotation_from_orientation_arc(
         "rotation": best["rotation"],
         "board_offset": board_offset,
         "camera_translation": camera_translation,
-        "robot_board_centers": robot_board_centers,
-        "camera_board_centers": camera_board_centers,
+        "robot_board_origins": robot_board_origins,
+        "camera_board_origins": camera_board_origins,
         "residuals": best["residuals"],
         "jacobian_condition": jacobian_condition,
         "translation_condition_number":
@@ -299,11 +299,11 @@ def evaluate_orientation_arc_with_fixed_rotation(
     )
     board_offset = translation_fit["board_translation"]
     camera_translation = translation_fit["camera_translation"]
-    robot_board_centers = (
+    robot_board_origins = (
         robot_translations
         + np.einsum("nij,j->ni", robot_rotations, board_offset)
     )
-    camera_board_centers = (
+    camera_board_origins = (
         np.einsum("ij,nj->ni", camera_rotation, board_translations)
         + camera_translation
     )
@@ -311,9 +311,9 @@ def evaluate_orientation_arc_with_fixed_rotation(
         "camera_rotation": camera_rotation,
         "board_offset": board_offset,
         "camera_translation": camera_translation,
-        "robot_board_centers": robot_board_centers,
-        "camera_board_centers": camera_board_centers,
-        "residuals": camera_board_centers - robot_board_centers,
+        "robot_board_origins": robot_board_origins,
+        "camera_board_origins": camera_board_origins,
+        "residuals": camera_board_origins - robot_board_origins,
         "translation_fit": translation_fit,
     }
 

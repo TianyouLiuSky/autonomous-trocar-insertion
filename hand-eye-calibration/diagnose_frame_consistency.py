@@ -23,6 +23,7 @@ from handeye_math import (
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = SCRIPT_DIR / "output"
+BOARD_CENTER_FROM_ORIGIN_M = np.array([0.040, 0.030, 0.0])
 HYPOTHESES = (
     "xyzw",
     "xyzw_inverse",
@@ -216,6 +217,10 @@ def analyze(spatial_path, orientation_path, output_dir):
         arc_fixed_spatial["residuals"], axis=1) * 1000.0
     arc_fixed_orientation_residual_mm = np.linalg.norm(
         arc_fixed_orientation["residuals"], axis=1) * 1000.0
+    orientation_board_center_offset = (
+        arc_fixed_orientation["board_offset"]
+        + standard_fit["board_rotation"] @ BOARD_CENTER_FROM_ORIGIN_M
+    )
     arc_vs_spatial_axis, arc_vs_spatial_deg = rotation_axis_angle(
         orientation_arc_fit["rotation"] @ spatial_fit["rotation"].T
     )
@@ -270,8 +275,8 @@ def analyze(spatial_path, orientation_path, output_dir):
             robot_center,
             camera_center,
             residual) in enumerate(zip(
-                orientation_arc_fit["robot_board_centers"],
-                orientation_arc_fit["camera_board_centers"],
+                orientation_arc_fit["robot_board_origins"],
+                orientation_arc_fit["camera_board_origins"],
                 orientation_arc_fit["residuals"]), start=1):
         orientation_arc_rows.append({
             "sample": index,
@@ -308,10 +313,10 @@ def analyze(spatial_path, orientation_path, output_dir):
                 float(np.max(orientation_arc_residual_mm)),
             "camera_rotation":
                 matrix_list(orientation_arc_fit["rotation"]),
-            "board_center_offset_ee_mm": (
+            "board_frame_origin_offset_ee_mm": (
                 orientation_arc_fit["board_offset"] * 1000.0
             ).tolist(),
-            "board_center_offset_norm_mm": float(
+            "board_frame_origin_offset_norm_mm": float(
                 np.linalg.norm(orientation_arc_fit["board_offset"])
                 * 1000.0
             ),
@@ -345,10 +350,10 @@ def analyze(spatial_path, orientation_path, output_dir):
                     arc_fixed_spatial_residual_mm)),
                 "max_residual_mm": float(np.max(
                     arc_fixed_spatial_residual_mm)),
-                "board_center_offset_ee_mm": (
+                "board_frame_origin_offset_ee_mm": (
                     arc_fixed_spatial["board_offset"] * 1000.0
                 ).tolist(),
-                "board_center_offset_norm_mm": float(
+                "board_frame_origin_offset_norm_mm": float(
                     np.linalg.norm(arc_fixed_spatial["board_offset"])
                     * 1000.0
                 ),
@@ -358,12 +363,19 @@ def analyze(spatial_path, orientation_path, output_dir):
                     arc_fixed_orientation_residual_mm)),
                 "max_residual_mm": float(np.max(
                     arc_fixed_orientation_residual_mm)),
-                "board_center_offset_ee_mm": (
+                "board_frame_origin_offset_ee_mm": (
                     arc_fixed_orientation["board_offset"] * 1000.0
                 ).tolist(),
-                "board_center_offset_norm_mm": float(
+                "board_frame_origin_offset_norm_mm": float(
                     np.linalg.norm(
                         arc_fixed_orientation["board_offset"])
+                    * 1000.0
+                ),
+                "geometric_board_center_offset_ee_mm": (
+                    orientation_board_center_offset * 1000.0
+                ).tolist(),
+                "geometric_board_center_offset_norm_mm": float(
+                    np.linalg.norm(orientation_board_center_offset)
                     * 1000.0
                 ),
             },
@@ -457,7 +469,7 @@ def analyze(spatial_path, orientation_path, output_dir):
         "  residual mean/max: {:.3f} / {:.3f} mm".format(
             np.mean(spatial_residual_mm), np.max(spatial_residual_mm))
     )
-    print("\nOrientation board-center arc fit (no physical pivot):")
+    print("\nOrientation board-origin arc fit (no physical pivot):")
     print(
         "  residual mean/max: {:.3f} / {:.3f} mm".format(
             np.mean(orientation_arc_residual_mm),
@@ -465,7 +477,8 @@ def analyze(spatial_path, orientation_path, output_dir):
         )
     )
     print(
-        "  fitted board-center offset in EE: {} mm (norm {:.3f} mm)"
+        "  fitted board-frame-origin offset in EE: {} mm "
+        "(norm {:.3f} mm)"
         .format(
             np.round(
                 orientation_arc_fit["board_offset"] * 1000.0, 3
@@ -507,6 +520,15 @@ def analyze(spatial_path, orientation_path, output_dir):
             np.linalg.norm(arc_fixed_spatial["board_offset"]) * 1000.0,
             np.linalg.norm(arc_fixed_orientation["board_offset"])
             * 1000.0,
+        )
+    )
+    print(
+        "  orientation-derived geometric board-center offset in EE: "
+        "{} mm (norm {:.3f} mm)".format(
+            np.round(
+                orientation_board_center_offset * 1000.0, 3
+            ).tolist(),
+            np.linalg.norm(orientation_board_center_offset) * 1000.0,
         )
     )
     print(

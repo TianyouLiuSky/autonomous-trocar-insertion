@@ -520,19 +520,20 @@ python3 diagnose_frame_consistency.py \
 ```
 
 No new captures are required. During the orientation sweep, FrameEE XYZ stays
-nearly fixed, but the board center moves because it has a physical offset from
-the end-effector origin. The diagnostic fits this board-center arc using:
+nearly fixed, but the ChArUco board-frame origin moves because it has a physical
+offset from the end-effector origin. The diagnostic fits this arc using:
 
 - FrameEE rotations,
 - FrameEE translations,
 - ChArUco translations,
-- an unknown board-center offset solved from the data.
+- an unknown board-frame-origin offset solved from the data.
 
 It does not use ChArUco board rotations to estimate the arc rotation. Record:
 
 ```text
-Orientation board-center arc residual mean/max:
-Fitted board-center offset in EE:
+Orientation board-origin arc residual mean/max:
+Fitted board-frame-origin offset in EE:
+Orientation-derived geometric board-center offset in EE:
 Arc rotation vs spatial translation:
 Arc rotation vs orientation rotation:
 Fixed spatial-rotation residual mean/max:
@@ -549,10 +550,12 @@ Interpretation:
 | Close to both | Original disagreement should also be small; verify selected datasets |
 | Similar residuals, large competitive spread, or far from both | Arc is inconclusive; inspect conditioning, synchronization, and motion diversity |
 
-Compare the fitted board-center offset norm with a rough physical measurement
-from the reported end-effector/force-sensor origin to the board center. It does
-not need ruler-level precision, but a physically impossible value makes the arc
-fit suspect.
+Compare the fitted board-frame-origin offset norm with a rough physical
+measurement from the reported end-effector/force-sensor origin to the board's
+OpenCV `(0, 0, 0)` corner. For an `8 x 6` board with `10 mm` squares, the
+geometric center is `[40, 30, 0] mm` in the board frame and is not the fitted
+point. The measurement does not need ruler-level precision, but a physically
+impossible value makes the arc fit suspect.
 
 ## Results to Return for Analysis
 

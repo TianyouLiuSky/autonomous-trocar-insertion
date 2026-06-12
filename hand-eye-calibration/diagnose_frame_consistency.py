@@ -14,6 +14,7 @@ from handeye_math import (
     estimate_camera_rotation_from_orientation_arc,
     estimate_camera_rotation_from_translations,
     estimate_rotations_from_relative_motion,
+    evaluate_orientation_arc_with_fixed_rotation,
     rotation_matrix_from_quaternion_xyzw,
     rotation_axis_angle,
     transforms_from_samples,
@@ -197,8 +198,24 @@ def analyze(spatial_path, orientation_path, output_dir):
             spatial_fit["rotation"],
         ),
     )
+    arc_fixed_spatial = evaluate_orientation_arc_with_fixed_rotation(
+        orientation_robot_rotations,
+        orientation_robot_translations,
+        orientation_board_translations,
+        spatial_fit["rotation"],
+    )
+    arc_fixed_orientation = evaluate_orientation_arc_with_fixed_rotation(
+        orientation_robot_rotations,
+        orientation_robot_translations,
+        orientation_board_translations,
+        standard_fit["camera_rotation"],
+    )
     orientation_arc_residual_mm = np.linalg.norm(
         orientation_arc_fit["residuals"], axis=1) * 1000.0
+    arc_fixed_spatial_residual_mm = np.linalg.norm(
+        arc_fixed_spatial["residuals"], axis=1) * 1000.0
+    arc_fixed_orientation_residual_mm = np.linalg.norm(
+        arc_fixed_orientation["residuals"], axis=1) * 1000.0
     arc_vs_spatial_axis, arc_vs_spatial_deg = rotation_axis_angle(
         orientation_arc_fit["rotation"] @ spatial_fit["rotation"].T
     )
@@ -316,6 +333,40 @@ def analyze(spatial_path, orientation_path, output_dir):
                 orientation_arc_fit["requested_starts"],
             "rotation_spread_deg":
                 orientation_arc_fit["rotation_spread_deg"],
+            "competitive_starts":
+                orientation_arc_fit["competitive_starts"],
+            "competitive_rotation_spread_deg":
+                orientation_arc_fit[
+                    "competitive_rotation_spread_deg"],
+            "candidate_summaries":
+                orientation_arc_fit["candidate_summaries"],
+            "fixed_spatial_rotation": {
+                "mean_residual_mm": float(np.mean(
+                    arc_fixed_spatial_residual_mm)),
+                "max_residual_mm": float(np.max(
+                    arc_fixed_spatial_residual_mm)),
+                "board_center_offset_ee_mm": (
+                    arc_fixed_spatial["board_offset"] * 1000.0
+                ).tolist(),
+                "board_center_offset_norm_mm": float(
+                    np.linalg.norm(arc_fixed_spatial["board_offset"])
+                    * 1000.0
+                ),
+            },
+            "fixed_orientation_rotation": {
+                "mean_residual_mm": float(np.mean(
+                    arc_fixed_orientation_residual_mm)),
+                "max_residual_mm": float(np.max(
+                    arc_fixed_orientation_residual_mm)),
+                "board_center_offset_ee_mm": (
+                    arc_fixed_orientation["board_offset"] * 1000.0
+                ).tolist(),
+                "board_center_offset_norm_mm": float(
+                    np.linalg.norm(
+                        arc_fixed_orientation["board_offset"])
+                    * 1000.0
+                ),
+            },
         },
         "intrinsics": {
             "spatial_source":
@@ -437,11 +488,46 @@ def analyze(spatial_path, orientation_path, output_dir):
         )
     )
     print(
-        "  optimization spread/condition: {:.6f} deg / {:.3g}".format(
+        "  fixed spatial-rotation residual mean/max: "
+        "{:.3f} / {:.3f} mm".format(
+            np.mean(arc_fixed_spatial_residual_mm),
+            np.max(arc_fixed_spatial_residual_mm),
+        )
+    )
+    print(
+        "  fixed orientation-rotation residual mean/max: "
+        "{:.3f} / {:.3f} mm".format(
+            np.mean(arc_fixed_orientation_residual_mm),
+            np.max(arc_fixed_orientation_residual_mm),
+        )
+    )
+    print(
+        "  fixed-offset norms spatial/orientation: {:.3f} / {:.3f} mm"
+        .format(
+            np.linalg.norm(arc_fixed_spatial["board_offset"]) * 1000.0,
+            np.linalg.norm(arc_fixed_orientation["board_offset"])
+            * 1000.0,
+        )
+    )
+    print(
+        "  competitive/all-start spread: {:.6f} / {:.6f} deg; "
+        "condition={:.3g}".format(
+            orientation_arc_fit["competitive_rotation_spread_deg"],
             orientation_arc_fit["rotation_spread_deg"],
             orientation_arc_fit["jacobian_condition"],
         )
     )
+    print("  optimizer starts (mean/max mm, angle from best):")
+    for candidate in orientation_arc_fit["candidate_summaries"]:
+        print(
+            "    start {}: {:.3f}/{:.3f} mm, {:.3f} deg{}".format(
+                candidate["start_index"],
+                candidate["mean_residual_mm"],
+                candidate["max_residual_mm"],
+                candidate["rotation_from_best_deg"],
+                "" if candidate["success"] else " (not converged)",
+            )
+        )
     print("\nQuaternion/frame hypotheses:")
     for result in hypothesis_results:
         print(

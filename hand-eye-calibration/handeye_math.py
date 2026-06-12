@@ -163,25 +163,13 @@ def estimate_camera_rotation_from_orientation_arc(
 
     def evaluate(rotation_vector):
         camera_rotation = rotation_matrix_from_rotvec(rotation_vector)
-        translation_fit = solve_translations(
+        fit = evaluate_orientation_arc_with_fixed_rotation(
             robot_rotations,
             robot_translations,
             board_translations,
             camera_rotation,
         )
-        board_offset = translation_fit["board_translation"]
-        camera_translation = translation_fit["camera_translation"]
-        robot_board_centers = (
-            robot_translations
-            + np.einsum("nij,j->ni", robot_rotations, board_offset)
-        )
-        camera_board_centers = (
-            np.einsum(
-                "ij,nj->ni", camera_rotation, board_translations)
-            + camera_translation
-        )
-        residuals = camera_board_centers - robot_board_centers
-        return residuals, translation_fit
+        return fit["residuals"], fit["translation_fit"]
 
     starts = [
         rotation_vector_from_matrix(rotation)
@@ -210,6 +198,19 @@ def estimate_camera_rotation_from_orientation_arc(
         })
 
     best = min(candidates, key=lambda candidate: candidate["cost"])
+    best_mean_residual = float(np.mean(
+        np.linalg.norm(best["residuals"], axis=1)))
+    candidate_summaries = []
+    for candidate in candidates:
+        residual_norms = np.linalg.norm(candidate["residuals"], axis=1)
+        candidate_summaries.append({
+            "start_index": candidate["start_index"],
+            "success": bool(candidate["solution"].success),
+            "mean_residual_mm": float(np.mean(residual_norms)) * 1000.0,
+            "max_residual_mm": float(np.max(residual_norms)) * 1000.0,
+            "rotation_from_best_deg": rotation_angle_deg(
+                candidate["rotation"] @ best["rotation"].T),
+        })
     solved_rotations = [
         candidate["rotation"] for candidate in candidates
         if candidate["solution"].success
@@ -221,6 +222,26 @@ def estimate_camera_rotation_from_orientation_arc(
                 rotation_spread_deg,
                 rotation_angle_deg(
                     solved_rotations[i] @ solved_rotations[j].T),
+            )
+    competitive = []
+    for candidate in candidates:
+        mean_residual = float(np.mean(
+            np.linalg.norm(candidate["residuals"], axis=1)))
+        if (
+                candidate["solution"].success
+                and mean_residual <= max(
+                    best_mean_residual * 1.10,
+                    best_mean_residual + 0.01e-3,
+                )):
+            competitive.append(candidate)
+    competitive_rotation_spread_deg = 0.0
+    for i in range(len(competitive)):
+        for j in range(i + 1, len(competitive)):
+            competitive_rotation_spread_deg = max(
+                competitive_rotation_spread_deg,
+                rotation_angle_deg(
+                    competitive[i]["rotation"]
+                    @ competitive[j]["rotation"].T),
             )
 
     jacobian = best["solution"].jac
@@ -255,6 +276,45 @@ def estimate_camera_rotation_from_orientation_arc(
             candidate["solution"].success for candidate in candidates),
         "requested_starts": len(candidates),
         "rotation_spread_deg": rotation_spread_deg,
+        "competitive_starts": len(competitive),
+        "competitive_rotation_spread_deg":
+            competitive_rotation_spread_deg,
+        "candidate_summaries": candidate_summaries,
+    }
+
+
+def evaluate_orientation_arc_with_fixed_rotation(
+        robot_rotations, robot_translations, board_translations,
+        camera_rotation):
+    """Evaluate orientation-sweep translations at a fixed camera rotation."""
+    robot_rotations = np.asarray(robot_rotations, dtype=float)
+    robot_translations = np.asarray(robot_translations, dtype=float)
+    board_translations = np.asarray(board_translations, dtype=float)
+    camera_rotation = np.asarray(camera_rotation, dtype=float).reshape(3, 3)
+    translation_fit = solve_translations(
+        robot_rotations,
+        robot_translations,
+        board_translations,
+        camera_rotation,
+    )
+    board_offset = translation_fit["board_translation"]
+    camera_translation = translation_fit["camera_translation"]
+    robot_board_centers = (
+        robot_translations
+        + np.einsum("nij,j->ni", robot_rotations, board_offset)
+    )
+    camera_board_centers = (
+        np.einsum("ij,nj->ni", camera_rotation, board_translations)
+        + camera_translation
+    )
+    return {
+        "camera_rotation": camera_rotation,
+        "board_offset": board_offset,
+        "camera_translation": camera_translation,
+        "robot_board_centers": robot_board_centers,
+        "camera_board_centers": camera_board_centers,
+        "residuals": camera_board_centers - robot_board_centers,
+        "translation_fit": translation_fit,
     }
 
 

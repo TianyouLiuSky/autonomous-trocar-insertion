@@ -535,17 +535,19 @@ Orientation board-center arc residual mean/max:
 Fitted board-center offset in EE:
 Arc rotation vs spatial translation:
 Arc rotation vs orientation rotation:
-Optimization spread/condition:
+Fixed spatial-rotation residual mean/max:
+Fixed orientation-rotation residual mean/max:
+Competitive/all-start spread:
 ```
 
 Interpretation:
 
 | Arc result | Most likely area to investigate |
 | --- | --- |
-| Low residual; close to orientation rotation; far from spatial translation | FrameEE XYZ coordinate basis or spatial translation publication |
-| Low residual; close to spatial translation; far from orientation rotation | FrameEE orientation or ChArUco board-rotation pathway |
+| Fixed orientation-derived rotation has a clearly lower residual | FrameEE XYZ coordinate basis or spatial translation publication |
+| Fixed spatial-derived rotation has a clearly lower residual | FrameEE orientation or ChArUco board-rotation pathway |
 | Close to both | Original disagreement should also be small; verify selected datasets |
-| Far from both or high residual | Board rigidity/model, synchronization, or insufficient arc conditioning |
+| Similar residuals, large competitive spread, or far from both | Arc is inconclusive; inspect conditioning, synchronization, and motion diversity |
 
 Compare the fitted board-center offset norm with a rough physical measurement
 from the reported end-effector/force-sensor origin to the board center. It does

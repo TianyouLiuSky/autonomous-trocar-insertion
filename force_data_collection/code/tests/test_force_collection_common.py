@@ -18,6 +18,7 @@ from force_collection_common import (  # noqa: E402
     insertion_metrics,
     pad_force,
     session_directory,
+    teleop_velocity,
 )
 
 
@@ -49,6 +50,39 @@ class ForceCollectionCommonTests(unittest.TestCase):
         )
         self.assertAlmostEqual(depth, 3.0)
         self.assertAlmostEqual(lateral, math.sqrt(5.0))
+
+    def test_teleop_velocity_stops_without_active_key(self):
+        result = teleop_velocity(
+            set(),
+            local_x=[1.0, 0.0, 0.0],
+            local_y=[0.0, 1.0, 0.0],
+            insertion_axis=[0.0, 0.0, -1.0],
+            speed=0.2,
+        )
+        np.testing.assert_allclose(result, [0.0, 0.0, 0.0])
+
+    def test_teleop_velocity_combines_keys_without_exceeding_speed(self):
+        result = teleop_velocity(
+            {"w", "a", "c"},
+            local_x=[1.0, 0.0, 0.0],
+            local_y=[0.0, 1.0, 0.0],
+            insertion_axis=[0.0, 0.0, -1.0],
+            speed=0.2,
+        )
+        self.assertAlmostEqual(np.linalg.norm(result), 0.2)
+        self.assertGreater(result[0], 0.0)
+        self.assertGreater(result[1], 0.0)
+        self.assertLess(result[2], 0.0)
+
+    def test_teleop_velocity_opposite_keys_cancel(self):
+        result = teleop_velocity(
+            {"w", "s", "c", "v"},
+            local_x=[1.0, 0.0, 0.0],
+            local_y=[0.0, 1.0, 0.0],
+            insertion_axis=[0.0, 0.0, -1.0],
+            speed=0.2,
+        )
+        np.testing.assert_allclose(result, [0.0, 0.0, 0.0])
 
     def test_session_directory(self):
         result = session_directory(

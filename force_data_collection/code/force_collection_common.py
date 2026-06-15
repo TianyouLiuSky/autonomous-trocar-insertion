@@ -23,6 +23,39 @@ def clip_norm(vector, max_norm):
     return vector * (float(max_norm) / norm)
 
 
+def teleop_velocity(
+    active_keys,
+    local_x,
+    local_y,
+    insertion_axis,
+    speed,
+):
+    """Return a normalized tool-frame velocity for game-style teleoperation."""
+    velocity = np.zeros(3, dtype=float)
+    active_keys = set(active_keys)
+    local_x = np.asarray(local_x, dtype=float)
+    local_y = np.asarray(local_y, dtype=float)
+    insertion_axis = np.asarray(insertion_axis, dtype=float)
+
+    if "w" in active_keys:
+        velocity += local_y
+    if "s" in active_keys:
+        velocity -= local_y
+    if "a" in active_keys:
+        velocity += local_x
+    if "d" in active_keys:
+        velocity -= local_x
+    if "c" in active_keys:
+        velocity += insertion_axis
+    if "v" in active_keys:
+        velocity -= insertion_axis
+
+    norm = float(np.linalg.norm(velocity))
+    if norm == 0.0:
+        return velocity
+    return velocity * (float(speed) / norm)
+
+
 def pad_force(values, count=FORCE_CHANNEL_COUNT):
     result = np.full(count, np.nan, dtype=float)
     values = np.asarray(list(values), dtype=float).reshape(-1)

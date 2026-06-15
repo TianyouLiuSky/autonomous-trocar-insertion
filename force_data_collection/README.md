@@ -80,24 +80,26 @@ Use two terminals on the robot computer.
 
 5. For the 30-degree script, confirm that the tool has clearance to rotate.
    The script rotates in place and waits until the locked orientation settles.
-6. Use the keyboard to move to the desired starting position:
+6. A dedicated movement-control window opens. Click that window, then hold the
+   keys to move to the desired starting position:
 
    | Key | Motion |
    |---|---|
-   | `W` / `S` | Forward / backward in the locked tool frame |
-   | `A` / `D` | Left / right in the locked tool frame |
-   | Up / Down arrow | Retract/up / insert/down along the locked tool axis |
+   | Hold `W` / `S` | Forward / backward in the locked tool frame |
+   | Hold `A` / `D` | Left / right in the locked tool frame |
+   | Hold `C` / `V` | Insert/down / retract/up along the locked tool axis |
    | Space | Stop and hold the current position |
    | `Q` | Stop and quit |
 
-   No key changes the tool orientation.
+   Translation stops as soon as the movement key is released. It also stops if
+   the control window loses focus. No key changes the tool orientation.
 
 7. In the recorder, optionally press **Tare** or `T`. A manual tare is retained
    for that trial. If you do not tare, Start automatically uses the most recent
    one second of force data as the baseline. Press **Start Collection** or `S`.
 8. Perform the insertion with the teleoperation keyboard.
 9. Press **Finish and Save** or `F` in the recorder.
-10. Retract the tool and press `Q` in the teleoperation terminal.
+10. Retract the tool and press `Q` in the movement-control window.
 
 Always keep a hand on the physical emergency stop. Test with no phantom first.
 
@@ -105,8 +107,7 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
 
 The conservative defaults are:
 
-- Position step: `0.05 mm` per key event
-- Maximum linear velocity: `0.20 mm/s`
+- Hold-to-move linear velocity: `0.20 mm/s`
 - Maximum angular velocity while holding angle: `0.05 rad/s`
 - Maximum insertion from teleoperation start: `3.0 mm`
 - Maximum total displacement from teleoperation start: `5.0 mm`
@@ -116,7 +117,6 @@ Example overrides:
 
 ```bash
 python3 insertion_30deg.py \
-  --step-mm 0.025 \
   --max-linear-vel 0.10 \
   --max-insertion-mm 2.0
 ```

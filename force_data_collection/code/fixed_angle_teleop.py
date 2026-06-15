@@ -7,32 +7,30 @@ applied relative to that pose, then the target orientation remains locked.
 """
 
 import argparse
-import select
 import sys
-import termios
 import time
-import tty
 
 import numpy as np
 import rospy
 from geometry_msgs.msg import Transform, Vector3
+from PyQt5 import QtCore, QtWidgets
 from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Float64, String
 
-from force_collection_common import clip_norm
+from force_collection_common import clip_norm, teleop_velocity
 
 
 HELP = """
 Fixed-angle force insertion teleoperation
 
-  W / S      : forward / backward along locked tool Y
-  A / D      : left / right along locked tool X
-  Down Arrow : insert/down along the locked tool axis
-  Up Arrow   : retract/up along the locked tool axis
+  Hold W / S : forward / backward along locked tool Y
+  Hold A / D : left / right along locked tool X
+  Hold C / V : insert/down / retract/up along locked tool axis
   Space      : stop and hold the current position
   H          : print this help
   Q          : stop and quit
 
+Movement stops when the key is released or this window loses focus.
 The keyboard cannot change tool orientation.
 Keep a hand on the physical emergency stop.
 """
@@ -60,7 +58,6 @@ def parse_args(default_angle_deg=None):
         default=1.0,
         help="Select the side of the direct-down reference used for the tilt.",
     )
-    parser.add_argument("--step-mm", type=float, default=0.05)
     parser.add_argument("--rate-hz", type=float, default=100.0)
     parser.add_argument("--position-gain", type=float, default=2.0)
     parser.add_argument("--orientation-gain", type=float, default=1.0)
@@ -102,47 +99,12 @@ def parse_args(default_angle_deg=None):
     return parser.parse_args()
 
 
-class KeyReader:
-    def __init__(self):
-        if not sys.stdin.isatty():
-            raise RuntimeError("Keyboard teleoperation requires an interactive terminal")
-        self._settings = None
-
-    def __enter__(self):
-        self._settings = termios.tcgetattr(sys.stdin)
-        tty.setraw(sys.stdin.fileno())
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._settings)
-
-    def read_key(self):
-        if not select.select([sys.stdin], [], [], 0.0)[0]:
-            return None
-        first = sys.stdin.read(1)
-        if first != "\x1b":
-            return first.lower()
-
-        sequence = first
-        deadline = time.time() + 0.01
-        while time.time() < deadline and len(sequence) < 3:
-            if select.select([sys.stdin], [], [], 0.001)[0]:
-                sequence += sys.stdin.read(1)
-        return {
-            "\x1b[A": "up",
-            "\x1b[B": "down",
-            "\x1b[C": "right",
-            "\x1b[D": "left",
-        }.get(sequence, "escape")
-
-
 class FixedAngleTeleop:
     def __init__(self, args):
         self.args = args
         self.position = None
         self.quaternion = None
         self.pose_receipt_time = None
-        self.target_position = None
         self.origin_position = None
         self.target_rotation = None
         self.insertion_axis = None
@@ -301,62 +263,44 @@ class FixedAngleTeleop:
 
     def start_teleoperation(self):
         self.origin_position = self.position.copy()
-        self.target_position = self.position.copy()
         self.last_action = "hold"
         self.action_pub.publish(self.last_action)
 
-    def _bounded_target(self, candidate):
-        offset = candidate - self.origin_position
+    @staticmethod
+    def action_label(active_keys):
+        labels = []
+        for key, label in (
+            ("w", "forward"),
+            ("s", "backward"),
+            ("a", "left"),
+            ("d", "right"),
+            ("c", "insert"),
+            ("v", "retract"),
+        ):
+            if key in active_keys:
+                labels.append(label)
+        return "+".join(labels) if labels else "hold"
+
+    def _apply_travel_limits(self, linear_velocity):
+        linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
+        offset = self.position - self.origin_position
         insertion = float(np.dot(offset, self.insertion_axis))
-        if insertion > self.args.max_insertion_mm:
-            print("\rInsertion limit reached.                 ", end="", flush=True)
-            return None
-        if insertion < -self.args.max_retraction_mm:
-            print("\rRetraction limit reached.                ", end="", flush=True)
-            return None
-        if np.linalg.norm(offset) > self.args.max_travel_mm:
-            print("\rTravel limit reached.                    ", end="", flush=True)
-            return None
-        return candidate
+        axial_speed = float(np.dot(linear_velocity, self.insertion_axis))
 
-    def apply_key(self, key):
-        step = self.args.step_mm
-        direction = None
-        action = None
+        if insertion >= self.args.max_insertion_mm and axial_speed > 0.0:
+            linear_velocity -= axial_speed * self.insertion_axis
+        elif insertion <= -self.args.max_retraction_mm and axial_speed < 0.0:
+            linear_velocity -= axial_speed * self.insertion_axis
 
-        if key == "down":
-            direction, action = self.insertion_axis, "insert"
-        elif key == "up":
-            direction, action = -self.insertion_axis, "retract"
-        elif key == "a":
-            direction, action = self.local_x, "left"
-        elif key == "d":
-            direction, action = -self.local_x, "right"
-        elif key == "w":
-            direction, action = self.local_y, "forward"
-        elif key == "s":
-            direction, action = -self.local_y, "backward"
-        elif key == " ":
-            self.target_position = self.position.copy()
-            self.last_action = "hold"
-            self.action_pub.publish(self.last_action)
-            return True
-        elif key == "h":
-            print(HELP)
-            return True
-        elif key in ("q", "\x03", "escape"):
-            return False
-        else:
-            return True
+        travel = float(np.linalg.norm(offset))
+        if travel >= self.args.max_travel_mm and travel > 0.0:
+            outward_axis = offset / travel
+            outward_speed = float(np.dot(linear_velocity, outward_axis))
+            if outward_speed > 0.0:
+                linear_velocity -= outward_speed * outward_axis
+        return linear_velocity
 
-        candidate = self._bounded_target(self.target_position + step * direction)
-        if candidate is not None:
-            self.target_position = candidate
-            self.last_action = action
-            self.action_pub.publish(action)
-        return True
-
-    def publish_control(self):
+    def publish_control(self, active_keys):
         if not self.pose_is_fresh():
             self.stop()
             raise RuntimeError("Pose stream is stale; motion stopped")
@@ -366,13 +310,21 @@ class FixedAngleTeleop:
             rotation_vector * self.args.orientation_gain,
             self.args.max_angular_vel,
         )
-        position_error = self.target_position - self.position
-        linear = clip_norm(
-            position_error * self.args.position_gain,
+        linear = teleop_velocity(
+            active_keys,
+            self.local_x,
+            self.local_y,
+            self.insertion_axis,
             self.args.max_linear_vel,
         )
+        linear = self._apply_travel_limits(linear)
         if orientation_error_deg > self.args.linear_hold_error_deg:
             linear[:] = 0.0
+
+        action = self.action_label(active_keys if np.linalg.norm(linear) else set())
+        if action != self.last_action:
+            self.last_action = action
+            self.action_pub.publish(action)
 
         self.linear_pub.publish(*[float(v) for v in linear])
         self.angular_pub.publish(*[float(v) for v in angular])
@@ -384,6 +336,12 @@ class FixedAngleTeleop:
         )
         return orientation_error_deg, insertion, lateral
 
+    def stop_translation(self):
+        self.linear_pub.publish(0.0, 0.0, 0.0)
+        if self.last_action != "hold":
+            self.last_action = "hold"
+            self.action_pub.publish(self.last_action)
+
     def stop(self):
         if hasattr(self, "linear_pub"):
             for _ in range(3):
@@ -391,10 +349,155 @@ class FixedAngleTeleop:
                 self.angular_pub.publish(0.0, 0.0, 0.0)
 
 
+class TeleopWindow(QtWidgets.QWidget):
+    MOVEMENT_KEYS = {
+        QtCore.Qt.Key_W: "w",
+        QtCore.Qt.Key_S: "s",
+        QtCore.Qt.Key_A: "a",
+        QtCore.Qt.Key_D: "d",
+        QtCore.Qt.Key_C: "c",
+        QtCore.Qt.Key_V: "v",
+    }
+
+    def __init__(self, teleop):
+        super().__init__()
+        self.teleop = teleop
+        self.active_keys = set()
+        self._closing = False
+
+        self.setWindowTitle(
+            "ATI Fixed-Angle Teleop - {:.1f} deg".format(
+                teleop.args.entry_angle_deg
+            )
+        )
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.setMinimumSize(620, 380)
+
+        title = QtWidgets.QLabel(
+            "Fixed-angle insertion: {:.1f} deg".format(
+                teleop.args.entry_angle_deg
+            )
+        )
+        title.setAlignment(QtCore.Qt.AlignCenter)
+        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+
+        instructions = QtWidgets.QLabel(
+            "Hold W/S: forward/backward    Hold A/D: left/right\n"
+            "Hold C: insert/down           Hold V: retract/up\n"
+            "Space: stop    Q: quit\n\n"
+            "Click this window before controlling the robot.\n"
+            "Releasing a key or changing window focus stops translation."
+        )
+        instructions.setAlignment(QtCore.Qt.AlignCenter)
+        instructions.setStyleSheet("font-size: 15px;")
+
+        self.key_status = QtWidgets.QLabel("ACTIVE: HOLD")
+        self.key_status.setAlignment(QtCore.Qt.AlignCenter)
+        self.key_status.setStyleSheet(
+            "font-size: 18px; font-weight: bold; color: #2e7d32;"
+        )
+        self.motion_status = QtWidgets.QLabel("")
+        self.motion_status.setAlignment(QtCore.Qt.AlignCenter)
+
+        stop_button = QtWidgets.QPushButton("STOP TRANSLATION [Space]")
+        stop_button.setMinimumHeight(52)
+        stop_button.setFocusPolicy(QtCore.Qt.NoFocus)
+        stop_button.clicked.connect(self.clear_motion)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(title)
+        layout.addWidget(instructions)
+        layout.addStretch(1)
+        layout.addWidget(self.key_status)
+        layout.addWidget(self.motion_status)
+        layout.addWidget(stop_button)
+
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self.control_tick)
+        self.timer.start(max(1, int(round(1000.0 / teleop.args.rate_hz))))
+
+    def clear_motion(self):
+        self.active_keys.clear()
+        self.teleop.stop_translation()
+        self.key_status.setText("ACTIVE: HOLD")
+
+    def keyPressEvent(self, event):
+        if event.isAutoRepeat():
+            return
+        key = self.MOVEMENT_KEYS.get(event.key())
+        if key is not None:
+            self.active_keys.add(key)
+            self.key_status.setText(
+                "ACTIVE: {}".format(
+                    self.teleop.action_label(self.active_keys).upper()
+                )
+            )
+            event.accept()
+            return
+        if event.key() == QtCore.Qt.Key_Space:
+            self.clear_motion()
+            event.accept()
+            return
+        if event.key() in (QtCore.Qt.Key_Q, QtCore.Qt.Key_Escape):
+            self.close()
+            event.accept()
+            return
+        if event.key() == QtCore.Qt.Key_H:
+            QtWidgets.QMessageBox.information(self, "Controls", HELP.strip())
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.isAutoRepeat():
+            return
+        key = self.MOVEMENT_KEYS.get(event.key())
+        if key is not None:
+            self.active_keys.discard(key)
+            if not self.active_keys:
+                self.teleop.stop_translation()
+            self.key_status.setText(
+                "ACTIVE: {}".format(
+                    self.teleop.action_label(self.active_keys).upper()
+                )
+            )
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    def focusOutEvent(self, event):
+        self.clear_motion()
+        super().focusOutEvent(event)
+
+    def control_tick(self):
+        if rospy.is_shutdown():
+            self.close()
+            return
+        try:
+            angle_error, insertion, lateral = self.teleop.publish_control(
+                self.active_keys
+            )
+            self.motion_status.setText(
+                "Angle error: {:.2f} deg    Insertion: {:+.3f} mm    "
+                "Lateral: {:.3f} mm".format(
+                    angle_error, insertion, lateral
+                )
+            )
+        except Exception as error:
+            self.clear_motion()
+            QtWidgets.QMessageBox.critical(self, "Teleoperation stopped", str(error))
+            self.close()
+
+    def closeEvent(self, event):
+        if not self._closing:
+            self._closing = True
+            self.clear_motion()
+            self.teleop.stop()
+        event.accept()
+
+
 def run(default_angle_deg=None):
     args = parse_args(default_angle_deg=default_angle_deg)
-    if args.step_mm <= 0.0:
-        raise ValueError("--step-mm must be positive")
     if args.max_linear_vel > 0.5 or args.max_angular_vel > 0.1:
         print("WARNING: configured velocity exceeds the conservative test range.")
 
@@ -424,38 +527,20 @@ def run(default_angle_deg=None):
         teleop.start_teleoperation()
         print(HELP)
         print(
-            "Step {:.3f} mm | angle {:.1f} deg | linear limit {:.3f} mm/s".format(
-                args.step_mm, args.entry_angle_deg, args.max_linear_vel
+            "Angle {:.1f} deg | hold-to-move speed {:.3f} mm/s".format(
+                args.entry_angle_deg, args.max_linear_vel
             )
         )
-
-        rate = rospy.Rate(args.rate_hz)
-        last_display = 0.0
-        with KeyReader() as keyboard:
-            running = True
-            while running and not rospy.is_shutdown():
-                key = keyboard.read_key()
-                if key is not None:
-                    running = teleop.apply_key(key)
-                    if not running:
-                        teleop.stop()
-                        break
-                angle_error, insertion, lateral = teleop.publish_control()
-                now = time.monotonic()
-                if now - last_display >= 0.2:
-                    print(
-                        "\rangle error={:5.2f} deg | insertion={:+6.3f} mm | "
-                        "lateral={:6.3f} mm | {:10s}".format(
-                            angle_error,
-                            insertion,
-                            lateral,
-                            teleop.last_action,
-                        ),
-                        end="",
-                        flush=True,
-                    )
-                    last_display = now
-                rate.sleep()
+        application = (
+            QtWidgets.QApplication.instance()
+            or QtWidgets.QApplication(sys.argv)
+        )
+        window = TeleopWindow(teleop)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        window.setFocus(QtCore.Qt.OtherFocusReason)
+        application.exec_()
     except (KeyboardInterrupt, rospy.ROSInterruptException):
         pass
     finally:

@@ -6,6 +6,7 @@ import math
 import socket
 import sys
 import threading
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -22,9 +23,11 @@ from force_collection_common import (
     FORCE_CHANNEL_COUNT,
     ema_update,
     finite_stats,
+    force_topic_candidates,
     insertion_metrics,
     pad_force,
     safe_json_number,
+    select_force_topic,
     session_directory,
     write_csv,
     write_json,
@@ -105,7 +108,19 @@ class ForceRecorder:
     def __init__(self, args):
         self.args = args
         prefix = "/{}".format(args.robot_name)
-        self.force_topic = args.force_topic or prefix + "/eye_robot/FBGForcesTip"
+        published_topics = (
+            rospy.get_published_topics() if not args.force_topic else []
+        )
+        discovered_force_topic = select_force_topic(
+            published_topics, args.robot_name
+        )
+        if args.force_topic:
+            self.force_topic_candidates = [args.force_topic]
+        elif discovered_force_topic:
+            self.force_topic_candidates = [discovered_force_topic]
+        else:
+            self.force_topic_candidates = force_topic_candidates(args.robot_name)
+        self.force_topic = None
         self.pose_topic = args.pose_topic or prefix + "/eye_robot/FrameEE"
         self.linear_command_topic = (
             args.linear_command_topic
@@ -124,6 +139,7 @@ class ForceRecorder:
         self.target_angle_deg = float(args.default_angle_deg)
         self.operator_action = "unknown"
         self.filtered_force = None
+        self.last_force_monotonic = None
         self.baseline = np.zeros(FORCE_CHANNEL_COUNT)
         self.baseline_ready = False
         self.baseline_source = "not_set"
@@ -139,13 +155,18 @@ class ForceRecorder:
         self.notes = ""
         self.last_saved_session = None
 
-        rospy.Subscriber(
-            self.force_topic,
-            Float64MultiArray,
-            self._force_callback,
-            queue_size=1000,
-            tcp_nodelay=True,
-        )
+        self.force_subscribers = []
+        for force_topic in self.force_topic_candidates:
+            self.force_subscribers.append(
+                rospy.Subscriber(
+                    force_topic,
+                    Float64MultiArray,
+                    self._force_callback,
+                    callback_args=force_topic,
+                    queue_size=1000,
+                    tcp_nodelay=True,
+                )
+            )
         rospy.Subscriber(
             self.pose_topic,
             Transform,
@@ -217,11 +238,17 @@ class ForceRecorder:
         with self.lock:
             self.operator_action = str(message.data)
 
-    def _force_callback(self, message):
+    def _force_callback(self, message, source_topic):
         now = rospy.Time.now().to_sec()
         raw = pad_force(message.data)
 
         with self.lock:
+            if self.force_topic is None:
+                self.force_topic = source_topic
+                rospy.loginfo("Using force topic: %s", source_topic)
+            elif source_topic != self.force_topic:
+                return
+            self.last_force_monotonic = time.monotonic()
             self.filtered_force = ema_update(
                 self.filtered_force, raw, self.args.ema_alpha
             )
@@ -341,7 +368,9 @@ class ForceRecorder:
                 )
             if not self.plot_buffer:
                 raise RuntimeError(
-                    "No force data received from {}".format(self.force_topic)
+                    "No force data received from {}".format(
+                        ", ".join(self.force_topic_candidates)
+                    )
                 )
 
             if not self.baseline_ready:
@@ -359,10 +388,9 @@ class ForceRecorder:
                 suffix += 1
             candidate.mkdir(parents=True)
 
-            position, quaternion = self.latest_pose
-            rotation = R.from_quat(quaternion)
+            position, _ = self.latest_pose
             self.record_start_position = position.copy()
-            self.record_insertion_axis = -rotation.as_matrix()[:, 2]
+            self.record_insertion_axis = np.array([0.0, 0.0, -1.0])
             self.record_start_ros_time = rospy.Time.now().to_sec()
             self.record_start_wall_time = now_wall
             self.session_dir = candidate
@@ -419,6 +447,7 @@ class ForceRecorder:
             "duration_s": safe_json_number(duration),
             "force_unit": self.args.force_unit,
             "force_topic": self.force_topic,
+            "force_topic_candidates": self.force_topic_candidates,
             "pose_topic": self.pose_topic,
             "linear_command_topic": self.linear_command_topic,
             "angular_command_topic": self.angular_command_topic,
@@ -572,7 +601,22 @@ class ForceRecorder:
             sample_count = len(self.samples)
             angle = self.target_angle_deg
             pose_ready = self.latest_pose is not None
-        return items, baseline, recording, sample_count, angle, pose_ready
+            force_topic = self.force_topic
+            force_age_s = (
+                time.monotonic() - self.last_force_monotonic
+                if self.last_force_monotonic is not None
+                else math.nan
+            )
+        return (
+            items,
+            baseline,
+            recording,
+            sample_count,
+            angle,
+            pose_ready,
+            force_topic,
+            force_age_s,
+        )
 
 
 class RecorderWindow(QtWidgets.QWidget):
@@ -600,8 +644,9 @@ class RecorderWindow(QtWidgets.QWidget):
         )
         self.status = QtWidgets.QLabel("Waiting for force and pose topics...")
         self.topic_label = QtWidgets.QLabel(
-            "Force: {}\nPose: {}".format(
-                recorder.force_topic, recorder.pose_topic
+            "Force candidates: {}\nPose: {}".format(
+                ", ".join(recorder.force_topic_candidates),
+                recorder.pose_topic,
             )
         )
         self.topic_label.setTextInteractionFlags(
@@ -689,7 +734,13 @@ class RecorderWindow(QtWidgets.QWidget):
             sample_count,
             angle,
             pose_ready,
+            force_topic,
+            force_age_s,
         ) = self.recorder.plot_snapshot()
+        message_rate_hz = math.nan
+        latest_raw = np.full(FORCE_CHANNEL_COUNT, np.nan)
+        latest_filtered = np.full(FORCE_CHANNEL_COUNT, np.nan)
+        recent_peak_to_peak = np.full(FORCE_CHANNEL_COUNT, np.nan)
         if items:
             channel = int(self.channel_box.currentData())
             newest = items[-1][0]
@@ -698,25 +749,57 @@ class RecorderWindow(QtWidgets.QWidget):
             times = np.array([item[0] - newest for item in visible])
             raw = np.array([item[1][channel] for item in visible])
             filtered = np.array([item[2][channel] for item in visible])
+            latest_raw = items[-1][1]
+            latest_filtered = items[-1][2]
+            recent_raw = np.vstack([item[1] for item in visible])
+            for force_channel in range(FORCE_CHANNEL_COUNT):
+                values = recent_raw[:, force_channel]
+                values = values[np.isfinite(values)]
+                if values.size:
+                    recent_peak_to_peak[force_channel] = np.ptp(values)
+            if len(visible) >= 2:
+                duration = visible[-1][0] - visible[0][0]
+                if duration > 0.0:
+                    message_rate_hz = (len(visible) - 1) / duration
             if self.subtract_baseline.isChecked():
                 raw = raw - baseline[channel]
                 filtered = filtered - baseline[channel]
             self.raw_curve.setData(times, raw)
             self.filtered_curve.setData(times, filtered)
 
-        if recording:
-            self.status.setText(
-                "RECORDING | samples={} | target angle={:.1f} deg".format(
-                    sample_count, angle
-                )
+        delta = latest_filtered - baseline
+        state = (
+            "RECORDING | samples={}".format(sample_count)
+            if recording
+            else "READY"
+        )
+        force_state = "ready"
+        if not items:
+            force_state = "missing"
+        elif not math.isfinite(force_age_s) or force_age_s > 1.0:
+            force_state = "stale"
+        if force_state != "ready" or not pose_ready:
+            state = "WAITING"
+        self.status.setText(
+            "{} | angle={:.1f} deg | force={} | pose={} | rate={:.1f} Hz | "
+            "age={:.3f} s\n"
+            "source={}\n"
+            "raw [0..3] = {}\n"
+            "filtered-baseline [0..3] = {}".format(
+                state,
+                angle,
+                force_state,
+                "ready" if pose_ready else "missing",
+                message_rate_hz,
+                force_age_s,
+                force_topic or "waiting for first force message",
+                np.array2string(latest_raw, precision=7),
+                np.array2string(delta, precision=7),
             )
-        elif not items or not pose_ready:
-            self.status.setText(
-                "Waiting | force={} | pose={}".format(
-                    "ready" if items else "missing",
-                    "ready" if pose_ready else "missing",
-                )
+            + "\nrecent raw peak-to-peak [0..3] = {}".format(
+                np.array2string(recent_peak_to_peak, precision=7)
             )
+        )
 
     def keyPressEvent(self, event):
         if self.notes.hasFocus():

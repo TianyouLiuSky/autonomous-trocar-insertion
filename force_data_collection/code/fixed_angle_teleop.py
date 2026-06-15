@@ -2,8 +2,8 @@
 """
 Fixed-angle keyboard teleoperation for force insertion experiments.
 
-The pose at startup is the direct-down reference pose. A non-zero entry angle is
-applied relative to that pose, then the target orientation remains locked.
+The direct-down reference is an absolute robot orientation. A non-zero entry
+angle is applied relative to that reference, then the target remains locked.
 """
 
 import argparse
@@ -17,7 +17,11 @@ from PyQt5 import QtCore, QtWidgets
 from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Float64, String
 
-from force_collection_common import clip_norm, teleop_velocity
+from force_collection_common import (
+    clip_norm,
+    locked_target_rotation,
+    teleop_velocity,
+)
 
 
 HELP = """
@@ -43,7 +47,15 @@ def parse_args(default_angle_deg=None):
         "--entry-angle-deg",
         type=float,
         default=0.0 if default_angle_deg is None else default_angle_deg,
-        help="Angle relative to the startup direct-down reference pose.",
+        help="Angle relative to the configured straight orientation.",
+    )
+    parser.add_argument(
+        "--straight-rpy-deg",
+        type=float,
+        nargs=3,
+        metavar=("ROLL", "PITCH", "YAW"),
+        default=(0.0, 13.0, 0.0),
+        help="Absolute straight orientation in XYZ Euler degrees.",
     )
     parser.add_argument(
         "--tilt-axis",
@@ -77,7 +89,7 @@ def parse_args(default_angle_deg=None):
         "--max-insertion-mm",
         type=float,
         default=3.0,
-        help="Maximum insertion along the locked tool axis from teleoperation start.",
+        help="Maximum robot-base Z-down travel from teleoperation start.",
     )
     parser.add_argument(
         "--max-retraction-mm",
@@ -113,6 +125,7 @@ class FixedAngleTeleop:
         self.down_axis = np.array([0.0, 0.0, -1.0])
         self.last_linear_command = np.zeros(3)
         self.last_action = "initializing"
+        self.last_block_reason = "none"
 
         prefix = "/{}".format(args.robot_name)
         self.linear_topic = prefix + "/eyerobot2/desiredTipVelocities"
@@ -177,23 +190,26 @@ class FixedAngleTeleop:
         )
 
     def configure_locked_orientation(self):
-        reference_rotation = R.from_quat(self.quaternion.copy())
-        axis_index = 0 if self.args.tilt_axis == "local-x" else 1
-        local_axis = np.zeros(3)
-        local_axis[axis_index] = self.args.tilt_sign
-        delta = R.from_rotvec(
-            np.deg2rad(self.args.entry_angle_deg) * local_axis
+        self.target_rotation = locked_target_rotation(
+            straight_rpy_deg=self.args.straight_rpy_deg,
+            entry_angle_deg=self.args.entry_angle_deg,
+            tilt_axis=self.args.tilt_axis,
+            tilt_sign=self.args.tilt_sign,
         )
-        self.target_rotation = reference_rotation * delta
         matrix = self.target_rotation.as_matrix()
         self.local_x = matrix[:, 0]
         self.local_y = matrix[:, 1]
         self.insertion_axis = -matrix[:, 2]
+        self.target_rpy_deg = self.target_rotation.as_euler(
+            "xyz", degrees=True
+        )
 
         self.angle_pub.publish(float(self.args.entry_angle_deg))
         self.mode_pub.publish(
-            "{}deg_{}".format(
-                self.args.entry_angle_deg, self.args.tilt_axis
+            "{}deg_{}_target_rpy_{:+.3f}_{:+.3f}_{:+.3f}".format(
+                self.args.entry_angle_deg,
+                self.args.tilt_axis,
+                *self.target_rpy_deg,
             )
         )
 
@@ -205,15 +221,23 @@ class FixedAngleTeleop:
         return rotation_vector, error_deg
 
     def rotate_to_locked_orientation(self):
-        if abs(self.args.entry_angle_deg) < 1e-9:
-            print("Startup orientation captured as the direct-down reference.")
+        _, initial_error_deg = self.orientation_error()
+        if initial_error_deg <= self.args.orientation_tol_deg:
+            print(
+                "Already at locked target orientation; error {:.3f} deg.".format(
+                    initial_error_deg
+                )
+            )
             return
 
         if not self.args.yes:
             response = input(
-                "\nThe robot will rotate in place to {:.1f} degrees about {}.\n"
+                "\nThe robot will rotate in place to target RPY {} deg.\n"
+                "Entry angle is {:.1f} degrees about {}.\n"
                 "Confirm clearance, keep hand on e-stop, then type YES: ".format(
-                    self.args.entry_angle_deg, self.args.tilt_axis
+                    np.round(self.target_rpy_deg, 3),
+                    self.args.entry_angle_deg,
+                    self.args.tilt_axis,
                 )
             ).strip()
             if response != "YES":
@@ -312,16 +336,36 @@ class FixedAngleTeleop:
             rotation_vector * self.args.orientation_gain,
             self.args.max_angular_vel,
         )
-        linear = teleop_velocity(
+        requested_linear = teleop_velocity(
             active_keys,
             self.args.max_linear_vel,
         )
-        linear = self._apply_travel_limits(linear)
-        if orientation_error_deg > self.args.linear_hold_error_deg:
+        linear = self._apply_travel_limits(requested_linear)
+        self.last_block_reason = "none"
+        if (
+            np.linalg.norm(requested_linear) > 0.0
+            and np.linalg.norm(linear) == 0.0
+        ):
+            self.last_block_reason = "travel limit"
+        if (
+            np.linalg.norm(requested_linear) > 0.0
+            and orientation_error_deg > self.args.linear_hold_error_deg
+        ):
             linear[:] = 0.0
+            self.last_block_reason = (
+                "orientation error {:.2f} > {:.2f} deg".format(
+                    orientation_error_deg,
+                    self.args.linear_hold_error_deg,
+                )
+            )
         self.last_linear_command = linear.copy()
 
-        action = self.action_label(active_keys if np.linalg.norm(linear) else set())
+        if self.last_block_reason != "none":
+            action = "blocked_" + self.last_block_reason.replace(" ", "_")
+        else:
+            action = self.action_label(
+                active_keys if np.linalg.norm(linear) else set()
+            )
         if action != self.last_action:
             self.last_action = action
             self.action_pub.publish(action)
@@ -481,13 +525,15 @@ class TeleopWindow(QtWidgets.QWidget):
             self.motion_status.setText(
                 "Command [x,y,z]: [{:+.3f}, {:+.3f}, {:+.3f}] mm/s\n"
                 "Angle error: {:.2f} deg    Down travel: {:+.3f} mm    "
-                "XY travel: {:.3f} mm".format(
+                "XY travel: {:.3f} mm\n"
+                "Command gate: {}".format(
                     self.teleop.last_linear_command[0],
                     self.teleop.last_linear_command[1],
                     self.teleop.last_linear_command[2],
                     angle_error,
                     insertion,
                     lateral,
+                    self.teleop.last_block_reason,
                 )
             )
         except Exception as error:
@@ -526,10 +572,16 @@ def run(default_angle_deg=None):
             )
         )
         print(
-            "Treat the startup tool orientation as the direct-down reference "
-            "for the phantom surface."
+            "Straight reference RPY: {} deg".format(
+                np.asarray(args.straight_rpy_deg, dtype=float)
+            )
         )
         teleop.configure_locked_orientation()
+        print(
+            "Locked target RPY: {} deg".format(
+                np.round(teleop.target_rpy_deg, 3)
+            )
+        )
         teleop.rotate_to_locked_orientation()
         teleop.start_teleoperation()
         print(HELP)

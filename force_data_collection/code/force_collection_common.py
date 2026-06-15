@@ -8,9 +8,56 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 
 FORCE_CHANNEL_COUNT = 4
+
+
+def force_topic_candidates(robot_name):
+    """Return force-topic aliases used by the current EyeRobot codebase."""
+    return [
+        "/{}/eye_robot/FBGForcesTip".format(robot_name),
+        "/eye_robot/FBGForcesTip",
+    ]
+
+
+def select_force_topic(published_topics, robot_name):
+    """Select the best currently published FBG force topic, if one exists."""
+    published = set()
+    for item in published_topics or []:
+        if isinstance(item, (tuple, list)):
+            published.add(str(item[0]))
+        else:
+            published.add(str(item))
+
+    candidates = force_topic_candidates(robot_name)
+    for candidate in candidates:
+        if candidate in published:
+            return candidate
+
+    suffix_matches = sorted(
+        topic for topic in published if topic.endswith("/eye_robot/FBGForcesTip")
+    )
+    if len(suffix_matches) == 1:
+        return suffix_matches[0]
+    return None
+
+
+def locked_target_rotation(
+    straight_rpy_deg,
+    entry_angle_deg,
+    tilt_axis="local-y",
+    tilt_sign=1.0,
+):
+    """Build the fixed target orientation from the absolute straight pose."""
+    if tilt_axis not in ("local-x", "local-y"):
+        raise ValueError("tilt_axis must be local-x or local-y")
+    reference = R.from_euler("xyz", straight_rpy_deg, degrees=True)
+    local_axis = np.zeros(3)
+    local_axis[0 if tilt_axis == "local-x" else 1] = float(tilt_sign)
+    delta = R.from_rotvec(np.deg2rad(float(entry_angle_deg)) * local_axis)
+    return reference * delta
 
 
 def clip_norm(vector, max_norm):

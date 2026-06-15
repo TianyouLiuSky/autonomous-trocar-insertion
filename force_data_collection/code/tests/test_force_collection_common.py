@@ -15,8 +15,11 @@ sys.path.insert(0, str(CODE_DIR))
 from force_collection_common import (  # noqa: E402
     clip_norm,
     ema_update,
+    force_topic_candidates,
     insertion_metrics,
+    locked_target_rotation,
     pad_force,
+    select_force_topic,
     session_directory,
     teleop_velocity,
 )
@@ -32,6 +35,55 @@ class ForceCollectionCommonTests(unittest.TestCase):
         np.testing.assert_allclose(result[:2], [1.0, 2.0])
         self.assertTrue(math.isnan(result[2]))
         self.assertTrue(math.isnan(result[3]))
+
+    def test_force_topic_candidates_include_both_eye_robot_namespaces(self):
+        self.assertEqual(
+            force_topic_candidates("SHER20"),
+            [
+                "/SHER20/eye_robot/FBGForcesTip",
+                "/eye_robot/FBGForcesTip",
+            ],
+        )
+
+    def test_select_force_topic_prefers_requested_robot_namespace(self):
+        result = select_force_topic(
+            [
+                ("/eye_robot/FBGForcesTip", "std_msgs/Float64MultiArray"),
+                (
+                    "/SHER20/eye_robot/FBGForcesTip",
+                    "std_msgs/Float64MultiArray",
+                ),
+            ],
+            "SHER20",
+        )
+        self.assertEqual(result, "/SHER20/eye_robot/FBGForcesTip")
+
+    def test_select_force_topic_accepts_legacy_namespace(self):
+        result = select_force_topic(
+            ["/eye_robot/FBGForcesTip"],
+            "SHER20",
+        )
+        self.assertEqual(result, "/eye_robot/FBGForcesTip")
+
+    def test_default_locked_orientations(self):
+        straight = locked_target_rotation(
+            straight_rpy_deg=[0.0, 13.0, 0.0],
+            entry_angle_deg=0.0,
+        )
+        angled = locked_target_rotation(
+            straight_rpy_deg=[0.0, 13.0, 0.0],
+            entry_angle_deg=30.0,
+        )
+        np.testing.assert_allclose(
+            straight.as_euler("xyz", degrees=True),
+            [0.0, 13.0, 0.0],
+            atol=1e-10,
+        )
+        np.testing.assert_allclose(
+            angled.as_euler("xyz", degrees=True),
+            [0.0, 43.0, 0.0],
+            atol=1e-10,
+        )
 
     def test_ema_update_preserves_missing_channel(self):
         previous = np.array([1.0, 2.0, np.nan, np.nan])

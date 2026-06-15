@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+
+import math
+import sys
+import unittest
+from datetime import datetime
+from pathlib import Path
+
+import numpy as np
+
+
+CODE_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(CODE_DIR))
+
+from force_collection_common import (  # noqa: E402
+    clip_norm,
+    ema_update,
+    insertion_metrics,
+    pad_force,
+    session_directory,
+)
+
+
+class ForceCollectionCommonTests(unittest.TestCase):
+    def test_clip_norm(self):
+        clipped = clip_norm([3.0, 4.0, 0.0], 2.0)
+        self.assertAlmostEqual(np.linalg.norm(clipped), 2.0)
+
+    def test_pad_force(self):
+        result = pad_force([1.0, 2.0])
+        np.testing.assert_allclose(result[:2], [1.0, 2.0])
+        self.assertTrue(math.isnan(result[2]))
+        self.assertTrue(math.isnan(result[3]))
+
+    def test_ema_update_preserves_missing_channel(self):
+        previous = np.array([1.0, 2.0, np.nan, np.nan])
+        current = np.array([3.0, np.nan, 4.0, np.nan])
+        result = ema_update(previous, current, 0.25)
+        self.assertAlmostEqual(result[0], 1.5)
+        self.assertAlmostEqual(result[1], 2.0)
+        self.assertAlmostEqual(result[2], 4.0)
+        self.assertTrue(math.isnan(result[3]))
+
+    def test_insertion_metrics(self):
+        depth, lateral = insertion_metrics(
+            position_mm=[1.0, 2.0, -3.0],
+            start_position_mm=[0.0, 0.0, 0.0],
+            insertion_axis=[0.0, 0.0, -1.0],
+        )
+        self.assertAlmostEqual(depth, 3.0)
+        self.assertAlmostEqual(lateral, math.sqrt(5.0))
+
+    def test_session_directory(self):
+        result = session_directory(
+            "/tmp/data",
+            30.0,
+            now=datetime(2026, 6, 15, 12, 30, 45),
+        )
+        self.assertEqual(
+            result.name, "20260615_123045_angle_p30deg"
+        )
+
+    def test_session_directory_with_unknown_angle(self):
+        result = session_directory(
+            "/tmp/data",
+            math.nan,
+            now=datetime(2026, 6, 15, 12, 30, 45),
+        )
+        self.assertEqual(
+            result.name, "20260615_123045_angle_unknown"
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

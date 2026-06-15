@@ -23,9 +23,9 @@ from force_collection_common import clip_norm, teleop_velocity
 HELP = """
 Fixed-angle force insertion teleoperation
 
-  Hold W / S : forward / backward along locked tool Y
-  Hold A / D : left / right along locked tool X
-  Hold C / V : insert/down / retract/up along locked tool axis
+  Hold W / S : robot-base X+ / X-
+  Hold A / D : robot-base Y+ / Y-
+  Hold C / V : robot-base Z- (down) / Z+ (up)
   Space      : stop and hold the current position
   H          : print this help
   Q          : stop and quit
@@ -110,6 +110,8 @@ class FixedAngleTeleop:
         self.insertion_axis = None
         self.local_x = None
         self.local_y = None
+        self.down_axis = np.array([0.0, 0.0, -1.0])
+        self.last_linear_command = np.zeros(3)
         self.last_action = "initializing"
 
         prefix = "/{}".format(args.robot_name)
@@ -270,12 +272,12 @@ class FixedAngleTeleop:
     def action_label(active_keys):
         labels = []
         for key, label in (
-            ("w", "forward"),
-            ("s", "backward"),
-            ("a", "left"),
-            ("d", "right"),
-            ("c", "insert"),
-            ("v", "retract"),
+            ("w", "x_plus"),
+            ("s", "x_minus"),
+            ("a", "y_plus"),
+            ("d", "y_minus"),
+            ("c", "z_minus_down"),
+            ("v", "z_plus_up"),
         ):
             if key in active_keys:
                 labels.append(label)
@@ -284,13 +286,13 @@ class FixedAngleTeleop:
     def _apply_travel_limits(self, linear_velocity):
         linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
         offset = self.position - self.origin_position
-        insertion = float(np.dot(offset, self.insertion_axis))
-        axial_speed = float(np.dot(linear_velocity, self.insertion_axis))
+        insertion = float(np.dot(offset, self.down_axis))
+        axial_speed = float(np.dot(linear_velocity, self.down_axis))
 
         if insertion >= self.args.max_insertion_mm and axial_speed > 0.0:
-            linear_velocity -= axial_speed * self.insertion_axis
+            linear_velocity -= axial_speed * self.down_axis
         elif insertion <= -self.args.max_retraction_mm and axial_speed < 0.0:
-            linear_velocity -= axial_speed * self.insertion_axis
+            linear_velocity -= axial_speed * self.down_axis
 
         travel = float(np.linalg.norm(offset))
         if travel >= self.args.max_travel_mm and travel > 0.0:
@@ -312,14 +314,12 @@ class FixedAngleTeleop:
         )
         linear = teleop_velocity(
             active_keys,
-            self.local_x,
-            self.local_y,
-            self.insertion_axis,
             self.args.max_linear_vel,
         )
         linear = self._apply_travel_limits(linear)
         if orientation_error_deg > self.args.linear_hold_error_deg:
             linear[:] = 0.0
+        self.last_linear_command = linear.copy()
 
         action = self.action_label(active_keys if np.linalg.norm(linear) else set())
         if action != self.last_action:
@@ -330,13 +330,14 @@ class FixedAngleTeleop:
         self.angular_pub.publish(*[float(v) for v in angular])
 
         offset = self.position - self.origin_position
-        insertion = float(np.dot(offset, self.insertion_axis))
+        insertion = float(np.dot(offset, self.down_axis))
         lateral = float(
-            np.linalg.norm(offset - insertion * self.insertion_axis)
+            np.linalg.norm(offset - insertion * self.down_axis)
         )
         return orientation_error_deg, insertion, lateral
 
     def stop_translation(self):
+        self.last_linear_command[:] = 0.0
         self.linear_pub.publish(0.0, 0.0, 0.0)
         if self.last_action != "hold":
             self.last_action = "hold"
@@ -382,8 +383,8 @@ class TeleopWindow(QtWidgets.QWidget):
         title.setStyleSheet("font-size: 20px; font-weight: bold;")
 
         instructions = QtWidgets.QLabel(
-            "Hold W/S: forward/backward    Hold A/D: left/right\n"
-            "Hold C: insert/down           Hold V: retract/up\n"
+            "Hold W/S: robot X+ / X-       Hold A/D: robot Y+ / Y-\n"
+            "Hold C: robot Z- (down)       Hold V: robot Z+ (up)\n"
             "Space: stop    Q: quit\n\n"
             "Click this window before controlling the robot.\n"
             "Releasing a key or changing window focus stops translation."
@@ -478,9 +479,15 @@ class TeleopWindow(QtWidgets.QWidget):
                 self.active_keys
             )
             self.motion_status.setText(
-                "Angle error: {:.2f} deg    Insertion: {:+.3f} mm    "
-                "Lateral: {:.3f} mm".format(
-                    angle_error, insertion, lateral
+                "Command [x,y,z]: [{:+.3f}, {:+.3f}, {:+.3f}] mm/s\n"
+                "Angle error: {:.2f} deg    Down travel: {:+.3f} mm    "
+                "XY travel: {:.3f} mm".format(
+                    self.teleop.last_linear_command[0],
+                    self.teleop.last_linear_command[1],
+                    self.teleop.last_linear_command[2],
+                    angle_error,
+                    insertion,
+                    lateral,
                 )
             )
         except Exception as error:

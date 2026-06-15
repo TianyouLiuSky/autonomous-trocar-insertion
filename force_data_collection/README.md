@@ -85,14 +85,15 @@ Use two terminals on the robot computer.
 
    | Key | Motion |
    |---|---|
-   | Hold `W` / `S` | Forward / backward in the locked tool frame |
-   | Hold `A` / `D` | Left / right in the locked tool frame |
-   | Hold `C` / `V` | Insert/down / retract/up along the locked tool axis |
+   | Hold `W` / `S` | Robot-base X+ / X- |
+   | Hold `A` / `D` | Robot-base Y+ / Y- |
+   | Hold `C` / `V` | Robot-base Z- (down) / Z+ (up) |
    | Space | Stop and hold the current position |
    | `Q` | Stop and quit |
 
-   Translation stops as soon as the movement key is released. It also stops if
-   the control window loses focus. No key changes the tool orientation.
+   Translation is commanded in the robot base frame. It stops as soon as the
+   movement key is released and also stops if the control window loses focus.
+   No key changes the tool orientation.
 
 7. In the recorder, optionally press **Tare** or `T`. A manual tare is retained
    for that trial. If you do not tare, Start automatically uses the most recent
@@ -109,7 +110,7 @@ The conservative defaults are:
 
 - Hold-to-move linear velocity: `0.20 mm/s`
 - Maximum angular velocity while holding angle: `0.05 rad/s`
-- Maximum insertion from teleoperation start: `3.0 mm`
+- Maximum downward Z travel from teleoperation start: `3.0 mm`
 - Maximum total displacement from teleoperation start: `5.0 mm`
 - Pose-staleness stop: `0.5 s`
 

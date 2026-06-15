@@ -25,30 +25,24 @@ def clip_norm(vector, max_norm):
 
 def teleop_velocity(
     active_keys,
-    local_x,
-    local_y,
-    insertion_axis,
     speed,
 ):
-    """Return a normalized tool-frame velocity for game-style teleoperation."""
+    """Return a normalized robot-base velocity for game-style teleoperation."""
     velocity = np.zeros(3, dtype=float)
     active_keys = set(active_keys)
-    local_x = np.asarray(local_x, dtype=float)
-    local_y = np.asarray(local_y, dtype=float)
-    insertion_axis = np.asarray(insertion_axis, dtype=float)
 
     if "w" in active_keys:
-        velocity += local_y
+        velocity[0] += 1.0
     if "s" in active_keys:
-        velocity -= local_y
+        velocity[0] -= 1.0
     if "a" in active_keys:
-        velocity += local_x
+        velocity[1] += 1.0
     if "d" in active_keys:
-        velocity -= local_x
+        velocity[1] -= 1.0
     if "c" in active_keys:
-        velocity += insertion_axis
+        velocity[2] -= 1.0
     if "v" in active_keys:
-        velocity -= insertion_axis
+        velocity[2] += 1.0
 
     norm = float(np.linalg.norm(velocity))
     if norm == 0.0:

@@ -42,7 +42,7 @@ Defaults for `--robot-name SHER20`:
 | Purpose | Topic |
 |---|---|
 | Robot pose | `/SHER20/eye_robot/FrameEE` |
-| Force | Auto-detects `FBGForcesTip`, `ScleraForces`, `HandleForces`, or `/CNN/HandleForce` |
+| Force | Use `/SHER20/eye_robot2/HandleForces` for final SHER2.0 collection |
 | Raw FBG wavelengths | Auto-detects `/eye_robot/WavelengthsRaw` or `/SHER20/eye_robot/WavelengthsRaw` |
 | Linear velocity command | `/SHER20/eyerobot2/desiredTipVelocities` |
 | Angular velocity command | `/SHER20/eyerobot2/desiredTipVelocitiesAngular` |
@@ -52,7 +52,9 @@ EyeRobot force-control scripts often use `FBGForcesTip`, but the SHER2.0
 logger also watches `ScleraForces` and `HandleForces`. The recorder UI displays
 raw force values, raw wavelength values, selected topics, message rates, message
 ages, and recent peak-to-peak motion so a topic, calibration, or sensor problem
-is visible.
+is visible. Debugging confirmed that `/SHER20/eye_robot2/HandleForces` is the
+working SHER2.0 force topic for this collection workflow; keep auto-detection
+for troubleshooting, but pin this topic for final experimental runs.
 
 ## Operator Workflow
 
@@ -65,7 +67,9 @@ Use two terminals on the robot computer.
 
    ```bash
    cd force_data_collection/code
-   python3 force_recorder_ui.py --robot-name SHER20
+   python3 force_recorder_ui.py \
+     --robot-name SHER20 \
+     --force-topic /SHER20/eye_robot2/HandleForces
    ```
 
 4. Start one fixed-angle teleoperation script:
@@ -122,7 +126,8 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
 - If the displayed Z command remains negative while `C` is held but the robot
   does not advance, SHER's lower-level controller is limiting the motion.
 - If force is `missing` or `stale`, launch with an explicit topic, for example
-  `--force-topic /eye_robot/FBGForcesTip`.
+  `--force-topic /SHER20/eye_robot2/HandleForces` for the validated SHER2.0
+  setup.
 - If messages are current but every raw channel and recent peak-to-peak value
   remains unchanged while load is applied, the issue is upstream of the
   recorder: sensor publication, sensor calibration, or robot operating mode.

@@ -82,7 +82,7 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
     parser.add_argument("--rate-hz", type=float, default=100.0)
     parser.add_argument("--position-gain", type=float, default=2.0)
     parser.add_argument("--orientation-gain", type=float, default=1.0)
-    parser.add_argument("--max-linear-vel", type=float, default=0.20)
+    parser.add_argument("--max-linear-vel", type=float, default=0.50)
     parser.add_argument("--max-angular-vel", type=float, default=0.05)
     parser.add_argument("--orientation-tol-deg", type=float, default=0.75)
     parser.add_argument("--orientation-settle-s", type=float, default=0.5)

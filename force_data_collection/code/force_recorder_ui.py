@@ -24,6 +24,7 @@ from force_collection_common import (
     ema_update,
     finite_stats,
     force_topic_candidates,
+    insertion_condition_label,
     insertion_metrics,
     pad_force,
     safe_json_number,
@@ -636,6 +637,9 @@ class ForceRecorder:
             "target_entry_angle_deg": safe_json_number(
                 self.target_angle_deg
             ),
+            "insertion_condition": insertion_condition_label(
+                self.target_angle_deg
+            ),
             "record_start_position_mm": [
                 safe_json_number(value)
                 for value in self.record_start_position
@@ -769,6 +773,7 @@ class ForceRecorder:
             recording = self.recording
             sample_count = len(self.samples)
             angle = self.target_angle_deg
+            insertion_axis = self.latest_insertion_axis.copy()
             pose_ready = self.latest_pose is not None
             force_topic = self.force_topic
             wavelength_topic = self.wavelength_topic
@@ -789,6 +794,7 @@ class ForceRecorder:
             recording,
             sample_count,
             angle,
+            insertion_axis,
             pose_ready,
             force_topic,
             force_age_s,
@@ -821,6 +827,11 @@ class RecorderWindow(QtWidgets.QWidget):
             "Optional notes: phantom, trial number, tissue condition..."
         )
         self.status = QtWidgets.QLabel("Waiting for force and pose topics...")
+        self.condition_label = QtWidgets.QLabel("Condition: UNKNOWN")
+        self.condition_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.condition_label.setStyleSheet(
+            "font-size: 18px; font-weight: bold; color: #1f4e79;"
+        )
         self.topic_label = QtWidgets.QLabel(
             "Force candidates: {}\nWavelength candidates: {}\nPose: {}".format(
                 ", ".join(recorder.force_topic_candidates),
@@ -853,6 +864,7 @@ class RecorderWindow(QtWidgets.QWidget):
         controls.addWidget(self.finish_button)
 
         layout = QtWidgets.QVBoxLayout(self)
+        layout.addWidget(self.condition_label)
         layout.addWidget(self.topic_label)
         layout.addLayout(controls)
         layout.addWidget(self.notes)
@@ -913,6 +925,7 @@ class RecorderWindow(QtWidgets.QWidget):
             recording,
             sample_count,
             angle,
+            insertion_axis,
             pose_ready,
             force_topic,
             force_age_s,
@@ -988,9 +1001,19 @@ class RecorderWindow(QtWidgets.QWidget):
             wavelength_state = "missing"
         elif not math.isfinite(wavelength_age_s) or wavelength_age_s > 1.0:
             wavelength_state = "stale"
+        condition = insertion_condition_label(angle)
+        self.condition_label.setText(
+            "Condition: {} | target angle {:.1f} deg | insertion axis {}".format(
+                condition,
+                angle,
+                np.array2string(insertion_axis, precision=4),
+            )
+        )
         self.status.setText(
-            "{} | angle={:.1f} deg | force={} | pose={} | rate={:.1f} Hz | "
+            "{} | condition={} | angle={:.1f} deg | force={} | pose={} | "
+            "rate={:.1f} Hz | "
             "age={:.3f} s\n"
+            "insertion axis [x,y,z] = {}\n"
             "source={}\n"
             "raw [0..3] = {}\n"
             "filtered-baseline [0..3] = {}\n"
@@ -999,11 +1022,13 @@ class RecorderWindow(QtWidgets.QWidget):
             "wavelength raw [0..3] = {}\n"
             "wavelength peak-to-peak [0..3] = {}".format(
                 state,
+                condition,
                 angle,
                 force_state,
                 "ready" if pose_ready else "missing",
                 message_rate_hz,
                 force_age_s,
+                np.array2string(insertion_axis, precision=6),
                 force_topic or "waiting for first force message",
                 np.array2string(latest_raw, precision=7),
                 np.array2string(delta, precision=7),

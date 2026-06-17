@@ -119,6 +119,8 @@ Use two terminals on the robot computer.
 7. In the recorder, optionally press **Tare** or `T`. A manual tare is retained
    for that trial. If you do not tare, Start automatically uses the most recent
    one second of force data as the baseline. Press **Start Collection** or `S`.
+   The recorder UI shows the active condition at the top: `DIRECT DOWN (0 deg)`
+   or `30 DEG OBLIQUE`.
 8. Perform the insertion with the teleoperation keyboard.
 9. Press **Finish and Save** or `F` in the recorder.
 10. Retract the tool and press `Q` in the movement-control window.
@@ -199,14 +201,18 @@ data/20260615_143000_angle_p30deg/
 time. Robot pose is the most recent pose at that force callback; use
 `pose_age_s` to evaluate synchronization quality.
 
+`metadata.json` stores `insertion_condition`, `target_entry_angle_deg`, and
+`record_insertion_axis_base_frame`. The session directory name also includes
+the angle label, for example `angle_p0deg` or `angle_p30deg`.
+
 ## Session Check
 
 ```bash
 python3 analyze_force_session.py ../data/<session_directory>
 ```
 
-This reports the recorded insertion axis, force callback rate, pose age,
-insertion depth range, and baseline-subtracted force ranges.
+This reports the recorded condition, insertion axis, force callback rate, pose
+age, insertion depth range, and baseline-subtracted force ranges.
 
 ## Dependencies
 

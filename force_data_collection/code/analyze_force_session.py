@@ -49,6 +49,7 @@ def main():
 
     print("Session: {}".format(session))
     print("Robot: {}".format(metadata.get("robot_name")))
+    print("Condition: {}".format(metadata.get("insertion_condition")))
     print("Target angle: {} deg".format(metadata.get("target_entry_angle_deg")))
     print(
         "Insertion axis: {}".format(

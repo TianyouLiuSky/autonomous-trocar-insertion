@@ -235,6 +235,22 @@ def insertion_metrics(position_mm, start_position_mm, insertion_axis):
     return depth, float(np.linalg.norm(lateral))
 
 
+def insertion_condition_label(angle_deg, tolerance_deg=0.5):
+    """Return a readable experiment-condition label from the recorded angle."""
+    try:
+        angle = float(angle_deg)
+    except (TypeError, ValueError):
+        return "UNKNOWN CONDITION"
+    if not math.isfinite(angle):
+        return "UNKNOWN CONDITION"
+    tolerance_deg = abs(float(tolerance_deg))
+    if abs(angle) <= tolerance_deg:
+        return "DIRECT DOWN (0 deg)"
+    if abs(angle - 30.0) <= tolerance_deg:
+        return "30 DEG OBLIQUE"
+    return "{:.1f} DEG INSERTION".format(angle)
+
+
 def session_directory(base_dir, angle_deg, now=None):
     now = now or datetime.now()
     if angle_deg is None or not math.isfinite(float(angle_deg)):

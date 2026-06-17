@@ -18,6 +18,7 @@ from force_collection_common import (  # noqa: E402
     ema_update,
     force_topic_candidates,
     insertion_metrics,
+    insertion_condition_label,
     locked_target_rotation,
     pad_force,
     select_force_topic,
@@ -241,6 +242,18 @@ class ForceCollectionCommonTests(unittest.TestCase):
         )
         self.assertEqual(
             result.name, "20260615_123045_angle_unknown"
+        )
+
+    def test_insertion_condition_label(self):
+        self.assertEqual(insertion_condition_label(0.0), "DIRECT DOWN (0 deg)")
+        self.assertEqual(insertion_condition_label(30.0), "30 DEG OBLIQUE")
+        self.assertEqual(
+            insertion_condition_label(float("nan")),
+            "UNKNOWN CONDITION",
+        )
+        self.assertEqual(
+            insertion_condition_label(45.0),
+            "45.0 DEG INSERTION",
         )
 
 

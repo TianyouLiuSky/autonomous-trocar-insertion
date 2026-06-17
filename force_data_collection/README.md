@@ -88,7 +88,10 @@ Use two terminals on the robot computer.
 
 5. For either script, confirm that the tool has clearance to rotate. The
    30-degree script rotates 60 degrees away from straight/direct-down. Both
-   scripts wait until the locked orientation settles.
+   scripts wait until the locked orientation settles. After orientation setup,
+   the script automatically moves the tip to the workspace center
+   `(-16.0, -109.0, 8.5)` mm within `0.5 mm` tolerance, unless launched with
+   `--skip-centering`.
 6. A dedicated movement-control window opens. Click that window, then hold the
    keys to move to the desired starting position:
 
@@ -105,8 +108,9 @@ Use two terminals on the robot computer.
    No key changes the tool orientation.
 
    The motion window reports `Command gate`. This code has no force/contact
-   stop. It can suppress translation if orientation error exceeds 2 degrees or
-   a travel limit is reached. SHER's lower-level force-control/contact behavior
+   stop. It can suppress translation if orientation error exceeds 2 degrees, a
+   relative travel limit is reached, or the command would push farther outside
+   the configured workspace. SHER's lower-level force-control/contact behavior
    is outside this script and must remain enabled unless the robot's responsible
    operator changes its controller mode.
 
@@ -123,6 +127,8 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
 
 - If `Command gate` reports an orientation or travel limit, this teleoperation
   script is suppressing the requested translation.
+- If `Command gate` reports a workspace limit, the current key command would
+  move the tip past the configured workspace boundary.
 - If the displayed Z command remains negative while `C` is held but the robot
   does not advance, SHER's lower-level controller is limiting the motion.
 - If force is `missing` or `stale`, launch with an explicit topic, for example
@@ -139,8 +145,12 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
 
 The conservative defaults are:
 
-- Hold-to-move linear velocity: `0.20 mm/s`
+- Hold-to-move linear velocity: `0.50 mm/s`
 - Maximum angular velocity while holding angle: `0.05 rad/s`
+- Workspace bounds: `x = -42..10 mm`, `y = -133..-85 mm`,
+  `z = -13..30 mm`
+- Automatic pre-teleop center target: `(-16.0, -109.0, 8.5) mm`
+- Workspace and centering tolerance: `0.5 mm`
 - Maximum downward Z travel from teleoperation start: `20.0 mm`
 - Maximum upward Z travel from teleoperation start: `20.0 mm`
 - Maximum total displacement from teleoperation start: `25.0 mm`

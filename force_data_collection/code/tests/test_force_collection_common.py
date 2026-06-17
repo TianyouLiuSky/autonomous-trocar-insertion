@@ -13,6 +13,7 @@ CODE_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CODE_DIR))
 
 from force_collection_common import (  # noqa: E402
+    apply_workspace_limits,
     clip_norm,
     ema_update,
     force_topic_candidates,
@@ -23,6 +24,7 @@ from force_collection_common import (  # noqa: E402
     select_wavelength_topic,
     session_directory,
     teleop_velocity,
+    workspace_center,
     wavelength_topic_candidates,
 )
 
@@ -174,6 +176,33 @@ class ForceCollectionCommonTests(unittest.TestCase):
             with self.subTest(key=key):
                 result = teleop_velocity({key}, speed=0.2)
                 np.testing.assert_allclose(result, expected)
+
+    def test_workspace_center_uses_midpoint(self):
+        result = workspace_center(
+            [-42.0, -133.0, -13.0],
+            [10.0, -85.0, 30.0],
+        )
+        np.testing.assert_allclose(result, [-16.0, -109.0, 8.5])
+
+    def test_apply_workspace_limits_blocks_outward_motion_near_boundary(self):
+        result = apply_workspace_limits(
+            position_mm=[-41.8, -109.0, 8.5],
+            linear_velocity_mm_s=[-0.2, 0.1, 0.0],
+            workspace_min_mm=[-42.0, -133.0, -13.0],
+            workspace_max_mm=[10.0, -85.0, 30.0],
+            tolerance_mm=0.5,
+        )
+        np.testing.assert_allclose(result, [0.0, 0.1, 0.0])
+
+    def test_apply_workspace_limits_allows_inward_motion_near_boundary(self):
+        result = apply_workspace_limits(
+            position_mm=[-41.8, -109.0, 8.5],
+            linear_velocity_mm_s=[0.2, 0.0, 0.0],
+            workspace_min_mm=[-42.0, -133.0, -13.0],
+            workspace_max_mm=[10.0, -85.0, 30.0],
+            tolerance_mm=0.5,
+        )
+        np.testing.assert_allclose(result, [0.2, 0.0, 0.0])
 
     def test_session_directory(self):
         result = session_directory(

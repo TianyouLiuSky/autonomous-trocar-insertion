@@ -18,9 +18,11 @@ from scipy.spatial.transform import Rotation as R
 from std_msgs.msg import Float64, String
 
 from force_collection_common import (
+    apply_workspace_limits,
     clip_norm,
     locked_target_rotation,
     teleop_velocity,
+    workspace_center,
 )
 
 
@@ -89,6 +91,52 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
     parser.add_argument("--orientation-timeout-s", type=float, default=30.0)
     parser.add_argument("--pose-timeout-s", type=float, default=0.5)
     parser.add_argument(
+        "--workspace-min-mm",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=(-42.0, -133.0, -13.0),
+        help="Minimum allowed robot-base tip position in millimeters.",
+    )
+    parser.add_argument(
+        "--workspace-max-mm",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=(10.0, -85.0, 30.0),
+        help="Maximum allowed robot-base tip position in millimeters.",
+    )
+    parser.add_argument(
+        "--workspace-tol-mm",
+        type=float,
+        default=0.5,
+        help="Boundary and centering tolerance used for workspace checks.",
+    )
+    parser.add_argument(
+        "--center-position-mm",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help=(
+            "Tip position to move to before teleoperation. Defaults to the "
+            "workspace midpoint; use NaN for any axis that should not be moved."
+        ),
+    )
+    parser.add_argument(
+        "--center-max-linear-vel",
+        type=float,
+        default=0.50,
+        help="Maximum speed for automatic workspace-centering motion.",
+    )
+    parser.add_argument("--center-settle-s", type=float, default=0.3)
+    parser.add_argument("--center-timeout-s", type=float, default=120.0)
+    parser.add_argument(
+        "--skip-centering",
+        action="store_true",
+        help="Skip automatic motion to the workspace center before teleoperation.",
+    )
+    parser.add_argument(
         "--max-travel-mm",
         type=float,
         default=25.0,
@@ -120,6 +168,23 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
     args = parser.parse_args()
     if args.label_angle_deg is None:
         args.label_angle_deg = args.entry_angle_deg
+    workspace_min = np.asarray(args.workspace_min_mm, dtype=float)
+    workspace_max = np.asarray(args.workspace_max_mm, dtype=float)
+    if np.any(workspace_min >= workspace_max):
+        parser.error("each --workspace-min-mm value must be below --workspace-max-mm")
+    if args.workspace_tol_mm < 0.0:
+        parser.error("--workspace-tol-mm must be non-negative")
+    if np.any(
+        workspace_min + args.workspace_tol_mm
+        >= workspace_max - args.workspace_tol_mm
+    ):
+        parser.error("--workspace-tol-mm is too large for the configured workspace")
+    if args.center_max_linear_vel <= 0.0:
+        parser.error("--center-max-linear-vel must be positive")
+    if args.center_settle_s < 0.0:
+        parser.error("--center-settle-s must be non-negative")
+    if args.center_timeout_s <= 0.0:
+        parser.error("--center-timeout-s must be positive")
     return args
 
 
@@ -138,6 +203,8 @@ class FixedAngleTeleop:
         self.last_linear_command = np.zeros(3)
         self.last_action = "initializing"
         self.last_block_reason = "none"
+        self.workspace_min = np.asarray(args.workspace_min_mm, dtype=float)
+        self.workspace_max = np.asarray(args.workspace_max_mm, dtype=float)
 
         prefix = "/{}".format(args.robot_name)
         self.linear_topic = prefix + "/eyerobot2/desiredTipVelocities"
@@ -276,6 +343,13 @@ class FixedAngleTeleop:
                 position_error * self.args.position_gain,
                 min(self.args.max_linear_vel, 0.10),
             )
+            linear = apply_workspace_limits(
+                self.position,
+                linear,
+                self.workspace_min,
+                self.workspace_max,
+                self.args.workspace_tol_mm,
+            )
             angular = clip_norm(
                 rotation_vector * self.args.orientation_gain,
                 self.args.max_angular_vel,
@@ -295,6 +369,126 @@ class FixedAngleTeleop:
                     print(
                         "Locked orientation reached; error {:.3f} deg.".format(
                             error_deg
+                        )
+                    )
+                    return
+            else:
+                settled_since = None
+            rate.sleep()
+
+    def workspace_center_target(self):
+        if self.args.center_position_mm is None:
+            target = workspace_center(self.workspace_min, self.workspace_max)
+        else:
+            target = np.asarray(self.args.center_position_mm, dtype=float)
+            if target.shape != (3,):
+                raise ValueError("--center-position-mm must contain 3 values")
+
+        target = target.copy()
+        active_axes = np.isfinite(target)
+        if np.any(active_axes):
+            lower = self.workspace_min + self.args.workspace_tol_mm
+            upper = self.workspace_max - self.args.workspace_tol_mm
+            target[active_axes] = np.clip(
+                target[active_axes],
+                lower[active_axes],
+                upper[active_axes],
+            )
+        return target, active_axes
+
+    def center_error(self, target, active_axes):
+        error = target - self.position
+        error[~active_axes] = 0.0
+        if not np.any(active_axes):
+            return error, 0.0
+        max_axis_error = float(np.max(np.abs(error[active_axes])))
+        return error, max_axis_error
+
+    def move_to_workspace_center(self):
+        if self.args.skip_centering:
+            print("Skipping automatic workspace-centering motion.")
+            return
+
+        target, active_axes = self.workspace_center_target()
+        if not np.any(active_axes):
+            print("No finite workspace-centering axes were requested.")
+            return
+
+        error, max_axis_error = self.center_error(target, active_axes)
+        if max_axis_error <= self.args.workspace_tol_mm:
+            print(
+                "Already within {:.3f} mm of workspace center target {}.".format(
+                    self.args.workspace_tol_mm,
+                    np.round(target, 3),
+                )
+            )
+            return
+
+        if not self.args.yes:
+            response = input(
+                "\nThe robot will translate the tip to workspace center {} mm "
+                "with {:.3f} mm tolerance before manual teleoperation.\n"
+                "Current position is {} mm.\n"
+                "Confirm clearance, keep hand on e-stop, then type YES: ".format(
+                    np.round(target, 3),
+                    self.args.workspace_tol_mm,
+                    np.round(self.position, 3),
+                )
+            ).strip()
+            if response != "YES":
+                raise RuntimeError("Operator did not confirm workspace centering")
+
+        print(
+            "Moving tip to workspace center target {} mm "
+            "(tolerance {:.3f} mm)...".format(
+                np.round(target, 3),
+                self.args.workspace_tol_mm,
+            )
+        )
+        self.last_action = "moving_to_workspace_center"
+        self.action_pub.publish(self.last_action)
+        rate = rospy.Rate(self.args.rate_hz)
+        deadline = time.monotonic() + self.args.center_timeout_s
+        settled_since = None
+
+        while not rospy.is_shutdown():
+            if not self.pose_is_fresh():
+                raise RuntimeError("Pose stream became stale during centering")
+            if time.monotonic() > deadline:
+                raise RuntimeError("Timed out while moving to workspace center")
+
+            rotation_vector, orientation_error_deg = self.orientation_error()
+            error, max_axis_error = self.center_error(target, active_axes)
+            linear = clip_norm(
+                error * self.args.position_gain,
+                min(self.args.center_max_linear_vel, self.args.max_linear_vel),
+            )
+            linear = apply_workspace_limits(
+                self.position,
+                linear,
+                self.workspace_min,
+                self.workspace_max,
+                self.args.workspace_tol_mm,
+            )
+            angular = clip_norm(
+                rotation_vector * self.args.orientation_gain,
+                self.args.max_angular_vel,
+            )
+
+            if orientation_error_deg > self.args.linear_hold_error_deg:
+                linear[:] = 0.0
+
+            self.linear_pub.publish(*[float(v) for v in linear])
+            self.angular_pub.publish(*[float(v) for v in angular])
+
+            if max_axis_error <= self.args.workspace_tol_mm:
+                if settled_since is None:
+                    settled_since = time.monotonic()
+                elif time.monotonic() - settled_since >= self.args.center_settle_s:
+                    self.stop()
+                    print(
+                        "Workspace center reached: position={} mm.".format(
+                            np.round(self.position, 3)
                         )
                     )
                     return
@@ -324,14 +518,17 @@ class FixedAngleTeleop:
 
     def _apply_travel_limits(self, linear_velocity):
         linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
+        limit_reason = None
         offset = self.position - self.origin_position
         insertion = float(np.dot(offset, self.down_axis))
         axial_speed = float(np.dot(linear_velocity, self.down_axis))
 
         if insertion >= self.args.max_insertion_mm and axial_speed > 0.0:
             linear_velocity -= axial_speed * self.down_axis
+            limit_reason = "travel limit"
         elif insertion <= -self.args.max_retraction_mm and axial_speed < 0.0:
             linear_velocity -= axial_speed * self.down_axis
+            limit_reason = "travel limit"
 
         travel = float(np.linalg.norm(offset))
         if travel >= self.args.max_travel_mm and travel > 0.0:
@@ -339,7 +536,18 @@ class FixedAngleTeleop:
             outward_speed = float(np.dot(linear_velocity, outward_axis))
             if outward_speed > 0.0:
                 linear_velocity -= outward_speed * outward_axis
-        return linear_velocity
+                limit_reason = "travel limit"
+
+        workspace_limited = apply_workspace_limits(
+            self.position,
+            linear_velocity,
+            self.workspace_min,
+            self.workspace_max,
+            self.args.workspace_tol_mm,
+        )
+        if not np.allclose(workspace_limited, linear_velocity):
+            limit_reason = "workspace limit"
+        return workspace_limited, limit_reason
 
     def publish_control(self, active_keys):
         if not self.pose_is_fresh():
@@ -355,13 +563,13 @@ class FixedAngleTeleop:
             active_keys,
             self.args.max_linear_vel,
         )
-        linear = self._apply_travel_limits(requested_linear)
+        linear, limit_reason = self._apply_travel_limits(requested_linear)
         self.last_block_reason = "none"
         if (
             np.linalg.norm(requested_linear) > 0.0
-            and np.linalg.norm(linear) == 0.0
+            and limit_reason is not None
         ):
-            self.last_block_reason = "travel limit"
+            self.last_block_reason = limit_reason
         if (
             np.linalg.norm(requested_linear) > 0.0
             and orientation_error_deg > self.args.linear_hold_error_deg
@@ -601,7 +809,22 @@ def run(default_angle_deg=None, default_label_angle_deg=None):
                 np.round(teleop.target_rpy_deg, 3)
             )
         )
+        center_target, active_axes = teleop.workspace_center_target()
+        print(
+            "Workspace bounds: min={} mm max={} mm tol={:.3f} mm".format(
+                np.round(teleop.workspace_min, 3),
+                np.round(teleop.workspace_max, 3),
+                args.workspace_tol_mm,
+            )
+        )
+        if not args.skip_centering and np.any(active_axes):
+            print(
+                "Pre-teleop center target: {} mm".format(
+                    np.round(center_target, 3)
+                )
+            )
         teleop.rotate_to_locked_orientation()
+        teleop.move_to_workspace_center()
         teleop.start_teleoperation()
         print(HELP)
         print(

@@ -136,6 +136,55 @@ def teleop_velocity(
     return velocity * (float(speed) / norm)
 
 
+def workspace_center(workspace_min_mm, workspace_max_mm):
+    """Return the midpoint of a 3D robot workspace box."""
+    workspace_min_mm = np.asarray(workspace_min_mm, dtype=float)
+    workspace_max_mm = np.asarray(workspace_max_mm, dtype=float)
+    if workspace_min_mm.shape != (3,) or workspace_max_mm.shape != (3,):
+        raise ValueError("workspace bounds must contain exactly 3 values")
+    if np.any(workspace_min_mm >= workspace_max_mm):
+        raise ValueError("each workspace minimum must be below its maximum")
+    return 0.5 * (workspace_min_mm + workspace_max_mm)
+
+
+def apply_workspace_limits(
+    position_mm,
+    linear_velocity_mm_s,
+    workspace_min_mm,
+    workspace_max_mm,
+    tolerance_mm=0.0,
+):
+    """Remove velocity components that would push farther out of the workspace."""
+    position_mm = np.asarray(position_mm, dtype=float)
+    limited_velocity = np.asarray(linear_velocity_mm_s, dtype=float).copy()
+    workspace_min_mm = np.asarray(workspace_min_mm, dtype=float)
+    workspace_max_mm = np.asarray(workspace_max_mm, dtype=float)
+    tolerance_mm = max(0.0, float(tolerance_mm))
+
+    if (
+        position_mm.shape != (3,)
+        or limited_velocity.shape != (3,)
+        or workspace_min_mm.shape != (3,)
+        or workspace_max_mm.shape != (3,)
+    ):
+        raise ValueError("position, velocity, and workspace bounds must be 3D")
+    if np.any(workspace_min_mm >= workspace_max_mm):
+        raise ValueError("each workspace minimum must be below its maximum")
+
+    for axis in range(3):
+        if (
+            position_mm[axis] <= workspace_min_mm[axis] + tolerance_mm
+            and limited_velocity[axis] < 0.0
+        ):
+            limited_velocity[axis] = 0.0
+        elif (
+            position_mm[axis] >= workspace_max_mm[axis] - tolerance_mm
+            and limited_velocity[axis] > 0.0
+        ):
+            limited_velocity[axis] = 0.0
+    return limited_velocity
+
+
 def pad_force(values, count=FORCE_CHANNEL_COUNT):
     result = np.full(count, np.nan, dtype=float)
     values = np.asarray(list(values), dtype=float).reshape(-1)

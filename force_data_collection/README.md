@@ -99,13 +99,15 @@ Use two terminals on the robot computer.
    |---|---|
    | Hold `W` / `S` | Robot-base X+ / X- |
    | Hold `A` / `D` | Robot-base Y+ / Y- |
-   | Hold `C` / `V` | Robot-base Z- (down) / Z+ (up) |
+   | Hold `C` / `V` | Insert along locked tool axis / retract along locked tool axis |
    | Space | Stop and hold the current position |
    | `Q` | Stop and quit |
 
-   Translation is commanded in the robot base frame. It stops as soon as the
-   movement key is released and also stops if the control window loses focus.
-   No key changes the tool orientation.
+   `W/S` and `A/D` are lateral robot-base motions. `C/V` follow the locked
+   insertion axis computed from the tool orientation, so the 30-degree condition
+   inserts along the oblique needle direction instead of robot-base vertical Z.
+   Translation stops as soon as the movement key is released and also stops if
+   the control window loses focus. No key changes the tool orientation.
 
    The motion window reports `Command gate`. This code has no force/contact
    stop. It can suppress translation if orientation error exceeds 2 degrees, a
@@ -129,8 +131,9 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
   script is suppressing the requested translation.
 - If `Command gate` reports a workspace limit, the current key command would
   move the tip past the configured workspace boundary.
-- If the displayed Z command remains negative while `C` is held but the robot
-  does not advance, SHER's lower-level controller is limiting the motion.
+- If the displayed command vector changes while `C` is held but the robot does
+  not advance along the tool axis, SHER's lower-level controller is limiting
+  the motion.
 - If force is `missing` or `stale`, launch with an explicit topic, for example
   `--force-topic /SHER20/eye_robot2/HandleForces` for the validated SHER2.0
   setup.
@@ -151,8 +154,10 @@ The conservative defaults are:
   `z = -13..30 mm`
 - Automatic pre-teleop center target: `(-16.0, -109.0, 8.5) mm`
 - Workspace and centering tolerance: `0.5 mm`
-- Maximum downward Z travel from teleoperation start: `20.0 mm`
-- Maximum upward Z travel from teleoperation start: `20.0 mm`
+- Maximum insertion along the locked tool axis from teleoperation start:
+  `20.0 mm`
+- Maximum retraction along the locked tool axis from teleoperation start:
+  `20.0 mm`
 - Maximum total displacement from teleoperation start: `25.0 mm`
 - Pose-staleness stop: `0.5 s`
 
@@ -186,6 +191,7 @@ data/20260615_143000_angle_p30deg/
 - Per-channel tare baseline and baseline-subtracted values
 - Latest robot pose, Euler orientation, and pose age
 - Insertion depth and lateral displacement from recording start
+- Insertion axis used for depth/lateral projection
 - Target entry angle and latest keyboard action
 - Latest commanded linear and angular velocity
 
@@ -199,8 +205,8 @@ time. Robot pose is the most recent pose at that force callback; use
 python3 analyze_force_session.py ../data/<session_directory>
 ```
 
-This reports force callback rate, pose age, insertion depth range, and
-baseline-subtracted force ranges.
+This reports the recorded insertion axis, force callback rate, pose age,
+insertion depth range, and baseline-subtracted force ranges.
 
 ## Dependencies
 

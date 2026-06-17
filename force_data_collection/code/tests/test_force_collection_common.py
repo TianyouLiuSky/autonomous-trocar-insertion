@@ -177,6 +177,25 @@ class ForceCollectionCommonTests(unittest.TestCase):
                 result = teleop_velocity({key}, speed=0.2)
                 np.testing.assert_allclose(result, expected)
 
+    def test_teleop_velocity_uses_custom_down_axis_for_insertion_keys(self):
+        down_axis = np.array([0.6, 0.0, -0.8])
+        insert = teleop_velocity({"c"}, speed=0.2, down_axis=down_axis)
+        retract = teleop_velocity({"v"}, speed=0.2, down_axis=down_axis)
+        np.testing.assert_allclose(insert, [0.12, 0.0, -0.16])
+        np.testing.assert_allclose(retract, [-0.12, 0.0, 0.16])
+
+    def test_teleop_velocity_normalizes_custom_down_axis(self):
+        result = teleop_velocity(
+            {"c"},
+            speed=0.2,
+            down_axis=[3.0, 0.0, -4.0],
+        )
+        np.testing.assert_allclose(result, [0.12, 0.0, -0.16])
+
+    def test_teleop_velocity_rejects_zero_down_axis(self):
+        with self.assertRaises(ValueError):
+            teleop_velocity({"c"}, speed=0.2, down_axis=[0.0, 0.0, 0.0])
+
     def test_workspace_center_uses_midpoint(self):
         result = workspace_center(
             [-42.0, -133.0, -13.0],

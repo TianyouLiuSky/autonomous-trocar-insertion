@@ -112,10 +112,21 @@ def clip_norm(vector, max_norm):
 def teleop_velocity(
     active_keys,
     speed,
+    down_axis=None,
 ):
-    """Return a normalized robot-base velocity for game-style teleoperation."""
+    """Return normalized game-style teleop velocity in the robot base frame."""
     velocity = np.zeros(3, dtype=float)
     active_keys = set(active_keys)
+    if down_axis is None:
+        down_axis = np.array([0.0, 0.0, -1.0], dtype=float)
+    else:
+        down_axis = np.asarray(down_axis, dtype=float)
+        if down_axis.shape != (3,):
+            raise ValueError("down_axis must contain exactly 3 values")
+        axis_norm = float(np.linalg.norm(down_axis))
+        if not math.isfinite(axis_norm) or axis_norm == 0.0:
+            raise ValueError("down_axis must be finite and non-zero")
+        down_axis = down_axis / axis_norm
 
     if "w" in active_keys:
         velocity[0] += 1.0
@@ -126,9 +137,9 @@ def teleop_velocity(
     if "d" in active_keys:
         velocity[1] -= 1.0
     if "c" in active_keys:
-        velocity[2] -= 1.0
+        velocity += down_axis
     if "v" in active_keys:
-        velocity[2] += 1.0
+        velocity -= down_axis
 
     norm = float(np.linalg.norm(velocity))
     if norm == 0.0:

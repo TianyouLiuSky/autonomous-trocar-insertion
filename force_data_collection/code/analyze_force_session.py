@@ -50,6 +50,11 @@ def main():
     print("Session: {}".format(session))
     print("Robot: {}".format(metadata.get("robot_name")))
     print("Target angle: {} deg".format(metadata.get("target_entry_angle_deg")))
+    print(
+        "Insertion axis: {}".format(
+            metadata.get("record_insertion_axis_base_frame")
+        )
+    )
     print("Samples: {}".format(len(rows)))
     if not rows:
         return

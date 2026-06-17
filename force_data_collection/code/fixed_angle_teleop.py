@@ -31,7 +31,7 @@ Fixed-angle force insertion teleoperation
 
   Hold W / S : robot-base X+ / X-
   Hold A / D : robot-base Y+ / Y-
-  Hold C / V : robot-base Z- (down) / Z+ (up)
+  Hold C / V : insert along locked tool axis / retract along locked tool axis
   Space      : stop and hold the current position
   H          : print this help
   Q          : stop and quit
@@ -146,13 +146,13 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
         "--max-insertion-mm",
         type=float,
         default=20.0,
-        help="Maximum robot-base Z-down travel from teleoperation start.",
+        help="Maximum insertion travel along the locked tool axis.",
     )
     parser.add_argument(
         "--max-retraction-mm",
         type=float,
         default=20.0,
-        help="Maximum retraction from teleoperation start.",
+        help="Maximum retraction travel opposite the locked tool axis.",
     )
     parser.add_argument(
         "--linear-hold-error-deg",
@@ -221,6 +221,9 @@ class FixedAngleTeleop:
         self.angle_pub = rospy.Publisher(
             status_prefix + "/target_angle_deg", Float64, queue_size=1, latch=True
         )
+        self.insertion_axis_pub = rospy.Publisher(
+            status_prefix + "/insertion_axis", Vector3, queue_size=1, latch=True
+        )
         self.mode_pub = rospy.Publisher(
             status_prefix + "/mode", String, queue_size=1, latch=True
         )
@@ -284,6 +287,7 @@ class FixedAngleTeleop:
         )
 
         self.angle_pub.publish(float(self.args.label_angle_deg))
+        self.insertion_axis_pub.publish(*[float(v) for v in self.insertion_axis])
         self.mode_pub.publish(
             "label_{}deg_tilt_{}deg_{}_target_rpy_{:+.3f}_{:+.3f}_{:+.3f}".format(
                 self.args.label_angle_deg,
@@ -509,25 +513,35 @@ class FixedAngleTeleop:
             ("s", "x_minus"),
             ("a", "y_plus"),
             ("d", "y_minus"),
-            ("c", "z_minus_down"),
-            ("v", "z_plus_up"),
+            ("c", "insert_along_tool"),
+            ("v", "retract_along_tool"),
         ):
             if key in active_keys:
                 labels.append(label)
         return "+".join(labels) if labels else "hold"
 
+    def axial_motion_axis(self):
+        if self.insertion_axis is None:
+            return self.down_axis
+        axis = np.asarray(self.insertion_axis, dtype=float)
+        axis_norm = float(np.linalg.norm(axis))
+        if not np.isfinite(axis_norm) or axis_norm == 0.0:
+            return self.down_axis
+        return axis / axis_norm
+
     def _apply_travel_limits(self, linear_velocity):
         linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
         limit_reason = None
+        axial_axis = self.axial_motion_axis()
         offset = self.position - self.origin_position
-        insertion = float(np.dot(offset, self.down_axis))
-        axial_speed = float(np.dot(linear_velocity, self.down_axis))
+        insertion = float(np.dot(offset, axial_axis))
+        axial_speed = float(np.dot(linear_velocity, axial_axis))
 
         if insertion >= self.args.max_insertion_mm and axial_speed > 0.0:
-            linear_velocity -= axial_speed * self.down_axis
+            linear_velocity -= axial_speed * axial_axis
             limit_reason = "travel limit"
         elif insertion <= -self.args.max_retraction_mm and axial_speed < 0.0:
-            linear_velocity -= axial_speed * self.down_axis
+            linear_velocity -= axial_speed * axial_axis
             limit_reason = "travel limit"
 
         travel = float(np.linalg.norm(offset))
@@ -562,6 +576,7 @@ class FixedAngleTeleop:
         requested_linear = teleop_velocity(
             active_keys,
             self.args.max_linear_vel,
+            down_axis=self.axial_motion_axis(),
         )
         linear, limit_reason = self._apply_travel_limits(requested_linear)
         self.last_block_reason = "none"
@@ -596,10 +611,11 @@ class FixedAngleTeleop:
         self.linear_pub.publish(*[float(v) for v in linear])
         self.angular_pub.publish(*[float(v) for v in angular])
 
+        axial_axis = self.axial_motion_axis()
         offset = self.position - self.origin_position
-        insertion = float(np.dot(offset, self.down_axis))
+        insertion = float(np.dot(offset, axial_axis))
         lateral = float(
-            np.linalg.norm(offset - insertion * self.down_axis)
+            np.linalg.norm(offset - insertion * axial_axis)
         )
         return orientation_error_deg, insertion, lateral
 
@@ -652,7 +668,7 @@ class TeleopWindow(QtWidgets.QWidget):
 
         instructions = QtWidgets.QLabel(
             "Hold W/S: robot X+ / X-       Hold A/D: robot Y+ / Y-\n"
-            "Hold C: robot Z- (down)       Hold V: robot Z+ (up)\n"
+            "Hold C: insert along tool     Hold V: retract along tool\n"
             "Space: stop    Q: quit\n\n"
             "Click this window before controlling the robot.\n"
             "Releasing a key or changing window focus stops translation."
@@ -748,8 +764,8 @@ class TeleopWindow(QtWidgets.QWidget):
             )
             self.motion_status.setText(
                 "Command [x,y,z]: [{:+.3f}, {:+.3f}, {:+.3f}] mm/s\n"
-                "Angle error: {:.2f} deg    Down travel: {:+.3f} mm    "
-                "XY travel: {:.3f} mm\n"
+                "Angle error: {:.2f} deg    Tool-axis travel: {:+.3f} mm    "
+                "Lateral travel: {:.3f} mm\n"
                 "Command gate: {}".format(
                     self.teleop.last_linear_command[0],
                     self.teleop.last_linear_command[1],
@@ -807,6 +823,11 @@ def run(default_angle_deg=None, default_label_angle_deg=None):
         print(
             "Locked target RPY: {} deg".format(
                 np.round(teleop.target_rpy_deg, 3)
+            )
+        )
+        print(
+            "Tool insertion axis in robot base frame: {}".format(
+                np.round(teleop.insertion_axis, 4)
             )
         )
         center_target, active_axes = teleop.workspace_center_target()

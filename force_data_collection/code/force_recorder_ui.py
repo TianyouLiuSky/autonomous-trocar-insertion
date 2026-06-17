@@ -77,6 +77,9 @@ SAMPLE_FIELDS = [
     "yaw_deg",
     "insertion_depth_mm",
     "lateral_displacement_mm",
+    "insertion_axis_x",
+    "insertion_axis_y",
+    "insertion_axis_z",
     "target_entry_angle_deg",
     "operator_action",
     "command_linear_x_mm_s",
@@ -97,6 +100,7 @@ def parse_args():
     parser.add_argument("--pose-topic", default=None)
     parser.add_argument("--linear-command-topic", default=None)
     parser.add_argument("--angular-command-topic", default=None)
+    parser.add_argument("--insertion-axis-topic", default=None)
     parser.add_argument("--data-dir", default=str(default_data_dir))
     parser.add_argument("--ema-alpha", type=float, default=0.2)
     parser.add_argument("--plot-seconds", type=float, default=20.0)
@@ -158,12 +162,17 @@ class ForceRecorder:
             args.angular_command_topic
             or prefix + "/eyerobot2/desiredTipVelocitiesAngular"
         )
+        self.insertion_axis_topic = (
+            args.insertion_axis_topic
+            or "/ati/force_collection/insertion_axis"
+        )
 
         self.lock = threading.RLock()
         self.latest_pose = None
         self.latest_pose_time = math.nan
         self.latest_linear_command = np.zeros(3)
         self.latest_angular_command = np.zeros(3)
+        self.latest_insertion_axis = np.array([0.0, 0.0, -1.0])
         self.target_angle_deg = float(args.default_angle_deg)
         self.operator_action = "unknown"
         self.filtered_force = None
@@ -239,6 +248,12 @@ class ForceRecorder:
             queue_size=10,
         )
         rospy.Subscriber(
+            self.insertion_axis_topic,
+            Vector3,
+            self._insertion_axis_callback,
+            queue_size=10,
+        )
+        rospy.Subscriber(
             "/ati/force_collection/action",
             String,
             self._action_callback,
@@ -279,6 +294,15 @@ class ForceRecorder:
     def _angle_callback(self, message):
         with self.lock:
             self.target_angle_deg = float(message.data)
+
+    def _insertion_axis_callback(self, message):
+        axis = vector3_to_array(message)
+        axis_norm = float(np.linalg.norm(axis))
+        if not np.isfinite(axis_norm) or axis_norm == 0.0:
+            rospy.logwarn("Ignoring invalid insertion axis: %s", axis)
+            return
+        with self.lock:
+            self.latest_insertion_axis = axis / axis_norm
 
     def _action_callback(self, message):
         with self.lock:
@@ -425,6 +449,10 @@ class ForceRecorder:
         )
         linear = self.latest_linear_command.copy()
         angular = self.latest_angular_command.copy()
+        if self.record_insertion_axis is None:
+            insertion_axis = self.latest_insertion_axis.copy()
+        else:
+            insertion_axis = self.record_insertion_axis.copy()
         if self.latest_wavelength is None:
             wavelength = np.full(FORCE_CHANNEL_COUNT, np.nan)
             wavelength_time = math.nan
@@ -457,6 +485,9 @@ class ForceRecorder:
             "yaw_deg": euler[2],
             "insertion_depth_mm": depth,
             "lateral_displacement_mm": lateral,
+            "insertion_axis_x": insertion_axis[0],
+            "insertion_axis_y": insertion_axis[1],
+            "insertion_axis_z": insertion_axis[2],
             "target_entry_angle_deg": self.target_angle_deg,
             "operator_action": self.operator_action,
             "command_linear_x_mm_s": linear[0],
@@ -524,7 +555,7 @@ class ForceRecorder:
 
             position, _ = self.latest_pose
             self.record_start_position = position.copy()
-            self.record_insertion_axis = np.array([0.0, 0.0, -1.0])
+            self.record_insertion_axis = self.latest_insertion_axis.copy()
             self.record_start_ros_time = rospy.Time.now().to_sec()
             self.record_start_wall_time = now_wall
             self.session_dir = candidate
@@ -587,6 +618,7 @@ class ForceRecorder:
             "pose_topic": self.pose_topic,
             "linear_command_topic": self.linear_command_topic,
             "angular_command_topic": self.angular_command_topic,
+            "insertion_axis_topic": self.insertion_axis_topic,
             "force_timestamp_semantics": (
                 "ROS receipt time; Float64MultiArray has no message header"
             ),

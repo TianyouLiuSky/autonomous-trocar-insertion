@@ -44,6 +44,11 @@ class ForceCollectionCommonTests(unittest.TestCase):
             [
                 "/eye_robot/FBGForcesTip",
                 "/SHER20/eye_robot/FBGForcesTip",
+                "/eye_robot2/ScleraForces",
+                "/SHER20/eye_robot2/ScleraForces",
+                "/eye_robot2/HandleForces",
+                "/SHER20/eye_robot2/HandleForces",
+                "/CNN/HandleForce",
             ],
         )
 

@@ -19,6 +19,11 @@ def force_topic_candidates(robot_name):
     return [
         "/eye_robot/FBGForcesTip",
         "/{}/eye_robot/FBGForcesTip".format(robot_name),
+        "/eye_robot2/ScleraForces",
+        "/{}/eye_robot2/ScleraForces".format(robot_name),
+        "/eye_robot2/HandleForces",
+        "/{}/eye_robot2/HandleForces".format(robot_name),
+        "/CNN/HandleForce",
     ]
 
 
@@ -48,8 +53,14 @@ def select_force_topic(published_topics, robot_name):
         if candidate in published:
             return candidate
 
+    suffixes = (
+        "/eye_robot/FBGForcesTip",
+        "/eye_robot2/ScleraForces",
+        "/eye_robot2/HandleForces",
+        "/CNN/HandleForce",
+    )
     suffix_matches = sorted(
-        topic for topic in published if topic.endswith("/eye_robot/FBGForcesTip")
+        topic for topic in published if any(topic.endswith(suffix) for suffix in suffixes)
     )
     if len(suffix_matches) == 1:
         return suffix_matches[0]

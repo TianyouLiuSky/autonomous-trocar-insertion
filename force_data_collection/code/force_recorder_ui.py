@@ -167,6 +167,7 @@ class ForceRecorder:
         self.target_angle_deg = float(args.default_angle_deg)
         self.operator_action = "unknown"
         self.filtered_force = None
+        self.latest_force_raw = None
         self.last_force_monotonic = None
         self.latest_wavelength = None
         self.latest_wavelength_time = math.nan
@@ -301,12 +302,32 @@ class ForceRecorder:
             return True
         return False
 
+    @staticmethod
+    def _signal_score(values):
+        values = np.asarray(values, dtype=float)
+        values = values[np.isfinite(values)]
+        if values.size == 0:
+            return 0.0
+        return float(np.max(np.abs(values)))
+
     def _force_callback(self, message, source_topic):
         now = rospy.Time.now().to_sec()
         raw = pad_force(message.data)
 
         with self.lock:
-            if self._should_use_topic(
+            source_score = self._signal_score(raw)
+            current_score = self._signal_score(self.latest_force_raw)
+            if (
+                source_topic != self.force_topic
+                and current_score > 1e-12
+                and source_score <= 1e-12
+            ):
+                return
+            force_signal_detected = (
+                source_score > max(current_score, 1e-12)
+                and current_score <= 1e-12
+            )
+            if force_signal_detected or self._should_use_topic(
                 source_topic,
                 self.force_topic,
                 self.force_topic_candidates,
@@ -324,6 +345,7 @@ class ForceRecorder:
                 self.force_topic = source_topic
                 rospy.loginfo("Using force topic: %s", source_topic)
             self.last_force_monotonic = time.monotonic()
+            self.latest_force_raw = raw.copy()
             self.filtered_force = ema_update(
                 self.filtered_force, raw, self.args.ema_alpha
             )

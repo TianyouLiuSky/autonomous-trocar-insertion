@@ -42,16 +42,17 @@ Defaults for `--robot-name SHER20`:
 | Purpose | Topic |
 |---|---|
 | Robot pose | `/SHER20/eye_robot/FrameEE` |
-| FBG force | Auto-detects `/eye_robot/FBGForcesTip` or `/SHER20/eye_robot/FBGForcesTip` |
+| Force | Auto-detects `FBGForcesTip`, `ScleraForces`, `HandleForces`, or `/CNN/HandleForce` |
 | Raw FBG wavelengths | Auto-detects `/eye_robot/WavelengthsRaw` or `/SHER20/eye_robot/WavelengthsRaw` |
 | Linear velocity command | `/SHER20/eyerobot2/desiredTipVelocities` |
 | Angular velocity command | `/SHER20/eyerobot2/desiredTipVelocitiesAngular` |
 
-The recorder stores all four available `FBGForcesTip` values. Existing
-EyeRobot force-control scripts treat channel 0 as the tip/axial force in
-newtons. The recorder UI displays all four raw force values, raw wavelength
-values, selected topics, message rates, message ages, and recent peak-to-peak
-motion so a topic, calibration, or sensor problem is visible.
+The recorder stores the active force topic's first four values. Existing
+EyeRobot force-control scripts often use `FBGForcesTip`, but the SHER2.0
+logger also watches `ScleraForces` and `HandleForces`. The recorder UI displays
+raw force values, raw wavelength values, selected topics, message rates, message
+ages, and recent peak-to-peak motion so a topic, calibration, or sensor problem
+is visible.
 
 ## Operator Workflow
 

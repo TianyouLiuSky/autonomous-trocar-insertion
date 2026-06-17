@@ -28,7 +28,9 @@ from force_collection_common import (
     pad_force,
     safe_json_number,
     select_force_topic,
+    select_wavelength_topic,
     session_directory,
+    wavelength_topic_candidates,
     write_csv,
     write_json,
 )
@@ -54,6 +56,13 @@ SAMPLE_FIELDS = [
     "force_delta_1",
     "force_delta_2",
     "force_delta_3",
+    "wavelength_message_length",
+    "wavelength_ros_time_s",
+    "wavelength_age_s",
+    "wavelength_raw_0",
+    "wavelength_raw_1",
+    "wavelength_raw_2",
+    "wavelength_raw_3",
     "pose_ros_time_s",
     "pose_age_s",
     "position_x_mm",
@@ -84,6 +93,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot-name", default="SHER20")
     parser.add_argument("--force-topic", default=None)
+    parser.add_argument("--wavelength-topic", default=None)
     parser.add_argument("--pose-topic", default=None)
     parser.add_argument("--linear-command-topic", default=None)
     parser.add_argument("--angular-command-topic", default=None)
@@ -108,19 +118,37 @@ class ForceRecorder:
     def __init__(self, args):
         self.args = args
         prefix = "/{}".format(args.robot_name)
-        published_topics = (
-            rospy.get_published_topics() if not args.force_topic else []
-        )
+        published_topics = rospy.get_published_topics()
         discovered_force_topic = select_force_topic(
             published_topics, args.robot_name
         )
         if args.force_topic:
             self.force_topic_candidates = [args.force_topic]
-        elif discovered_force_topic:
-            self.force_topic_candidates = [discovered_force_topic]
         else:
             self.force_topic_candidates = force_topic_candidates(args.robot_name)
+            if (
+                discovered_force_topic
+                and discovered_force_topic not in self.force_topic_candidates
+            ):
+                self.force_topic_candidates.append(discovered_force_topic)
         self.force_topic = None
+
+        discovered_wavelength_topic = select_wavelength_topic(
+            published_topics, args.robot_name
+        )
+        if args.wavelength_topic:
+            self.wavelength_topic_candidates = [args.wavelength_topic]
+        else:
+            self.wavelength_topic_candidates = wavelength_topic_candidates(
+                args.robot_name
+            )
+            if (
+                discovered_wavelength_topic
+                and discovered_wavelength_topic
+                not in self.wavelength_topic_candidates
+            ):
+                self.wavelength_topic_candidates.append(discovered_wavelength_topic)
+        self.wavelength_topic = None
         self.pose_topic = args.pose_topic or prefix + "/eye_robot/FrameEE"
         self.linear_command_topic = (
             args.linear_command_topic
@@ -140,11 +168,16 @@ class ForceRecorder:
         self.operator_action = "unknown"
         self.filtered_force = None
         self.last_force_monotonic = None
+        self.latest_wavelength = None
+        self.latest_wavelength_time = math.nan
+        self.latest_wavelength_length = 0
+        self.last_wavelength_monotonic = None
         self.baseline = np.zeros(FORCE_CHANNEL_COUNT)
         self.baseline_ready = False
         self.baseline_source = "not_set"
 
         self.plot_buffer = deque(maxlen=100000)
+        self.wavelength_buffer = deque(maxlen=100000)
         self.recording = False
         self.samples = []
         self.record_start_ros_time = None
@@ -163,6 +196,18 @@ class ForceRecorder:
                     Float64MultiArray,
                     self._force_callback,
                     callback_args=force_topic,
+                    queue_size=1000,
+                    tcp_nodelay=True,
+                )
+            )
+        self.wavelength_subscribers = []
+        for wavelength_topic in self.wavelength_topic_candidates:
+            self.wavelength_subscribers.append(
+                rospy.Subscriber(
+                    wavelength_topic,
+                    Float64MultiArray,
+                    self._wavelength_callback,
+                    callback_args=wavelength_topic,
                     queue_size=1000,
                     tcp_nodelay=True,
                 )
@@ -238,16 +283,46 @@ class ForceRecorder:
         with self.lock:
             self.operator_action = str(message.data)
 
+    @staticmethod
+    def _topic_priority(topic, candidates):
+        try:
+            return candidates.index(topic)
+        except ValueError:
+            return len(candidates)
+
+    def _should_use_topic(self, source_topic, current_topic, candidates, last_time):
+        if current_topic is None or source_topic == current_topic:
+            return True
+        if self._topic_priority(source_topic, candidates) < self._topic_priority(
+            current_topic, candidates
+        ):
+            return True
+        if last_time is not None and time.monotonic() - last_time > 1.0:
+            return True
+        return False
+
     def _force_callback(self, message, source_topic):
         now = rospy.Time.now().to_sec()
         raw = pad_force(message.data)
 
         with self.lock:
+            if self._should_use_topic(
+                source_topic,
+                self.force_topic,
+                self.force_topic_candidates,
+                self.last_force_monotonic,
+            ):
+                if self.force_topic != source_topic:
+                    self.filtered_force = None
+                    self.plot_buffer.clear()
+                    self.force_topic = source_topic
+                    rospy.loginfo("Using force topic: %s", source_topic)
+            else:
+                return
+
             if self.force_topic is None:
                 self.force_topic = source_topic
                 rospy.loginfo("Using force topic: %s", source_topic)
-            elif source_topic != self.force_topic:
-                return
             self.last_force_monotonic = time.monotonic()
             self.filtered_force = ema_update(
                 self.filtered_force, raw, self.args.ema_alpha
@@ -267,6 +342,29 @@ class ForceRecorder:
                 force_message_length=len(message.data),
             )
             self.samples.append(row)
+
+    def _wavelength_callback(self, message, source_topic):
+        now = rospy.Time.now().to_sec()
+        raw = pad_force(message.data)
+        with self.lock:
+            if self._should_use_topic(
+                source_topic,
+                self.wavelength_topic,
+                self.wavelength_topic_candidates,
+                self.last_wavelength_monotonic,
+            ):
+                if self.wavelength_topic != source_topic:
+                    self.wavelength_buffer.clear()
+                    self.wavelength_topic = source_topic
+                    rospy.loginfo("Using wavelength topic: %s", source_topic)
+            else:
+                return
+
+            self.latest_wavelength = raw.copy()
+            self.latest_wavelength_time = now
+            self.latest_wavelength_length = len(message.data)
+            self.last_wavelength_monotonic = time.monotonic()
+            self.wavelength_buffer.append((now, raw.copy()))
 
     def _make_sample(
         self, now, raw, filtered, baseline, force_message_length
@@ -305,11 +403,24 @@ class ForceRecorder:
         )
         linear = self.latest_linear_command.copy()
         angular = self.latest_angular_command.copy()
+        if self.latest_wavelength is None:
+            wavelength = np.full(FORCE_CHANNEL_COUNT, np.nan)
+            wavelength_time = math.nan
+            wavelength_age = math.nan
+            wavelength_length = 0
+        else:
+            wavelength = self.latest_wavelength.copy()
+            wavelength_time = self.latest_wavelength_time
+            wavelength_age = now - wavelength_time
+            wavelength_length = self.latest_wavelength_length
 
         row = {
             "ros_time_s": now,
             "elapsed_s": now - self.record_start_ros_time,
             "force_message_length": int(force_message_length),
+            "wavelength_message_length": int(wavelength_length),
+            "wavelength_ros_time_s": wavelength_time,
+            "wavelength_age_s": wavelength_age,
             "pose_ros_time_s": self.latest_pose_time,
             "pose_age_s": pose_age,
             "position_x_mm": position[0],
@@ -338,6 +449,7 @@ class ForceRecorder:
             row["force_filtered_{}".format(channel)] = filtered[channel]
             row["baseline_{}".format(channel)] = baseline[channel]
             row["force_delta_{}".format(channel)] = force_delta[channel]
+            row["wavelength_raw_{}".format(channel)] = wavelength[channel]
         return row
 
     def set_baseline_from_recent(self, window_s=1.0, source="manual_tare"):
@@ -448,6 +560,8 @@ class ForceRecorder:
             "force_unit": self.args.force_unit,
             "force_topic": self.force_topic,
             "force_topic_candidates": self.force_topic_candidates,
+            "wavelength_topic": self.wavelength_topic,
+            "wavelength_topic_candidates": self.wavelength_topic_candidates,
             "pose_topic": self.pose_topic,
             "linear_command_topic": self.linear_command_topic,
             "angular_command_topic": self.angular_command_topic,
@@ -596,19 +710,27 @@ class ForceRecorder:
     def plot_snapshot(self):
         with self.lock:
             items = list(self.plot_buffer)
+            wavelength_items = list(self.wavelength_buffer)
             baseline = self.baseline.copy()
             recording = self.recording
             sample_count = len(self.samples)
             angle = self.target_angle_deg
             pose_ready = self.latest_pose is not None
             force_topic = self.force_topic
+            wavelength_topic = self.wavelength_topic
             force_age_s = (
                 time.monotonic() - self.last_force_monotonic
                 if self.last_force_monotonic is not None
                 else math.nan
             )
+            wavelength_age_s = (
+                time.monotonic() - self.last_wavelength_monotonic
+                if self.last_wavelength_monotonic is not None
+                else math.nan
+            )
         return (
             items,
+            wavelength_items,
             baseline,
             recording,
             sample_count,
@@ -616,6 +738,8 @@ class ForceRecorder:
             pose_ready,
             force_topic,
             force_age_s,
+            wavelength_topic,
+            wavelength_age_s,
         )
 
 
@@ -644,8 +768,9 @@ class RecorderWindow(QtWidgets.QWidget):
         )
         self.status = QtWidgets.QLabel("Waiting for force and pose topics...")
         self.topic_label = QtWidgets.QLabel(
-            "Force candidates: {}\nPose: {}".format(
+            "Force candidates: {}\nWavelength candidates: {}\nPose: {}".format(
                 ", ".join(recorder.force_topic_candidates),
+                ", ".join(recorder.wavelength_topic_candidates),
                 recorder.pose_topic,
             )
         )
@@ -729,6 +854,7 @@ class RecorderWindow(QtWidgets.QWidget):
     def refresh(self):
         (
             items,
+            wavelength_items,
             baseline,
             recording,
             sample_count,
@@ -736,11 +862,16 @@ class RecorderWindow(QtWidgets.QWidget):
             pose_ready,
             force_topic,
             force_age_s,
+            wavelength_topic,
+            wavelength_age_s,
         ) = self.recorder.plot_snapshot()
         message_rate_hz = math.nan
         latest_raw = np.full(FORCE_CHANNEL_COUNT, np.nan)
         latest_filtered = np.full(FORCE_CHANNEL_COUNT, np.nan)
         recent_peak_to_peak = np.full(FORCE_CHANNEL_COUNT, np.nan)
+        wavelength_rate_hz = math.nan
+        latest_wavelength = np.full(FORCE_CHANNEL_COUNT, np.nan)
+        wavelength_peak_to_peak = np.full(FORCE_CHANNEL_COUNT, np.nan)
         if items:
             channel = int(self.channel_box.currentData())
             newest = items[-1][0]
@@ -767,6 +898,24 @@ class RecorderWindow(QtWidgets.QWidget):
             self.raw_curve.setData(times, raw)
             self.filtered_curve.setData(times, filtered)
 
+        if wavelength_items:
+            newest_wavelength = wavelength_items[-1][0]
+            wavelength_cutoff = newest_wavelength - self.recorder.args.plot_seconds
+            visible_wavelengths = [
+                item for item in wavelength_items if item[0] >= wavelength_cutoff
+            ]
+            latest_wavelength = wavelength_items[-1][1]
+            wavelength_raw = np.vstack([item[1] for item in visible_wavelengths])
+            for wavelength_channel in range(FORCE_CHANNEL_COUNT):
+                values = wavelength_raw[:, wavelength_channel]
+                values = values[np.isfinite(values)]
+                if values.size:
+                    wavelength_peak_to_peak[wavelength_channel] = np.ptp(values)
+            if len(visible_wavelengths) >= 2:
+                duration = visible_wavelengths[-1][0] - visible_wavelengths[0][0]
+                if duration > 0.0:
+                    wavelength_rate_hz = (len(visible_wavelengths) - 1) / duration
+
         delta = latest_filtered - baseline
         state = (
             "RECORDING | samples={}".format(sample_count)
@@ -780,12 +929,21 @@ class RecorderWindow(QtWidgets.QWidget):
             force_state = "stale"
         if force_state != "ready" or not pose_ready:
             state = "WAITING"
+        wavelength_state = "ready"
+        if not wavelength_items:
+            wavelength_state = "missing"
+        elif not math.isfinite(wavelength_age_s) or wavelength_age_s > 1.0:
+            wavelength_state = "stale"
         self.status.setText(
             "{} | angle={:.1f} deg | force={} | pose={} | rate={:.1f} Hz | "
             "age={:.3f} s\n"
             "source={}\n"
             "raw [0..3] = {}\n"
-            "filtered-baseline [0..3] = {}".format(
+            "filtered-baseline [0..3] = {}\n"
+            "recent raw peak-to-peak [0..3] = {}\n"
+            "wavelength={} | rate={:.1f} Hz | age={:.3f} s | source={}\n"
+            "wavelength raw [0..3] = {}\n"
+            "wavelength peak-to-peak [0..3] = {}".format(
                 state,
                 angle,
                 force_state,
@@ -795,9 +953,13 @@ class RecorderWindow(QtWidgets.QWidget):
                 force_topic or "waiting for first force message",
                 np.array2string(latest_raw, precision=7),
                 np.array2string(delta, precision=7),
-            )
-            + "\nrecent raw peak-to-peak [0..3] = {}".format(
-                np.array2string(recent_peak_to_peak, precision=7)
+                np.array2string(recent_peak_to_peak, precision=7),
+                wavelength_state,
+                wavelength_rate_hz,
+                wavelength_age_s,
+                wavelength_topic or "waiting for first wavelength message",
+                np.array2string(latest_wavelength, precision=7),
+                np.array2string(wavelength_peak_to_peak, precision=7),
             )
         )
 

@@ -23,12 +23,13 @@ Generated experiment data under `data/` is ignored by Git.
 ## Important Angle Convention
 
 The straight/direct-down robot orientation is the absolute XYZ Euler
-orientation `(roll, pitch, yaw) = (0, +13, 0)` degrees.
+orientation `(roll, pitch, yaw) = (0, -13, 0)` degrees.
 
-- `direct_down_insertion.py` moves to and locks `(0, +13, 0)`.
-- `insertion_30deg.py` applies 30 degrees about tool-local Y from that straight
-  orientation. With the default positive tilt this is equivalent to
-  approximately `(0, +43, 0)`.
+- `direct_down_insertion.py` moves to and locks `(0, -13, 0)`.
+- `insertion_30deg.py` represents the 30-degree-from-horizontal oblique
+  condition. Since straight/direct-down is vertical, the script applies
+  60 degrees about tool-local Y from straight. With the default positive tilt
+  this is equivalent to approximately `(0, +47, 0)`.
 
 Use `--tilt-axis local-x` or `--tilt-sign -1` if the experimental fixture needs
 the tilt in a different plane or direction. Verify the direction with the
@@ -41,14 +42,16 @@ Defaults for `--robot-name SHER20`:
 | Purpose | Topic |
 |---|---|
 | Robot pose | `/SHER20/eye_robot/FrameEE` |
-| FBG force | Auto-detects `/SHER20/eye_robot/FBGForcesTip` or `/eye_robot/FBGForcesTip` |
+| FBG force | Auto-detects `/eye_robot/FBGForcesTip` or `/SHER20/eye_robot/FBGForcesTip` |
+| Raw FBG wavelengths | Auto-detects `/eye_robot/WavelengthsRaw` or `/SHER20/eye_robot/WavelengthsRaw` |
 | Linear velocity command | `/SHER20/eyerobot2/desiredTipVelocities` |
 | Angular velocity command | `/SHER20/eyerobot2/desiredTipVelocitiesAngular` |
 
 The recorder stores all four available `FBGForcesTip` values. Existing
 EyeRobot force-control scripts treat channel 0 as the tip/axial force in
-newtons. The recorder UI displays all four raw values, the selected topic,
-message rate, and message age so a topic or sensor problem is visible.
+newtons. The recorder UI displays all four raw force values, raw wavelength
+values, selected topics, message rates, message ages, and recent peak-to-peak
+motion so a topic, calibration, or sensor problem is visible.
 
 ## Operator Workflow
 
@@ -56,7 +59,7 @@ Use two terminals on the robot computer.
 
 1. Place the phantom and tool in their correct experimental positions.
 2. Keep the tool clear of the phantom. The control script will rotate to the
-   configured straight orientation `(0, +13, 0)`.
+   configured straight orientation `(0, -13, 0)`.
 3. Start the recorder UI:
 
    ```bash
@@ -72,15 +75,15 @@ Use two terminals on the robot computer.
    python3 direct_down_insertion.py --robot-name SHER20
    ```
 
-   30-degree entry:
+   30-degree-from-horizontal entry:
 
    ```bash
    python3 insertion_30deg.py --robot-name SHER20
    ```
 
 5. For either script, confirm that the tool has clearance to rotate. The
-   30-degree script may require a larger rotation. Both scripts wait until the
-   locked orientation settles.
+   30-degree script rotates 60 degrees away from straight/direct-down. Both
+   scripts wait until the locked orientation settles.
 6. A dedicated movement-control window opens. Click that window, then hold the
    keys to move to the desired starting position:
 
@@ -122,6 +125,9 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
 - If messages are current but every raw channel and recent peak-to-peak value
   remains unchanged while load is applied, the issue is upstream of the
   recorder: sensor publication, sensor calibration, or robot operating mode.
+- If raw wavelengths change but force stays flat, the FBG sensor is likely
+  publishing but the force conversion/calibration path is not producing a
+  changing force estimate.
 
 ## Motion Defaults
 
@@ -129,8 +135,9 @@ The conservative defaults are:
 
 - Hold-to-move linear velocity: `0.20 mm/s`
 - Maximum angular velocity while holding angle: `0.05 rad/s`
-- Maximum downward Z travel from teleoperation start: `3.0 mm`
-- Maximum total displacement from teleoperation start: `5.0 mm`
+- Maximum downward Z travel from teleoperation start: `20.0 mm`
+- Maximum upward Z travel from teleoperation start: `20.0 mm`
+- Maximum total displacement from teleoperation start: `25.0 mm`
 - Pose-staleness stop: `0.5 s`
 
 Example overrides:
@@ -138,7 +145,7 @@ Example overrides:
 ```bash
 python3 insertion_30deg.py \
   --max-linear-vel 0.10 \
-  --max-insertion-mm 2.0
+  --max-insertion-mm 15.0
 ```
 
 ## Saved Session Format
@@ -158,6 +165,7 @@ data/20260615_143000_angle_p30deg/
 
 - Receipt timestamp and elapsed time
 - Four raw force channels
+- Four latest raw wavelength channels
 - Four EMA-filtered force channels
 - Per-channel tare baseline and baseline-subtracted values
 - Latest robot pose, Euler orientation, and pose age

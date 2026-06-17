@@ -40,21 +40,30 @@ Keep a hand on the physical emergency stop.
 """
 
 
-def parse_args(default_angle_deg=None):
+def parse_args(default_angle_deg=None, default_label_angle_deg=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot-name", default="SHER20")
     parser.add_argument(
         "--entry-angle-deg",
         type=float,
         default=0.0 if default_angle_deg is None else default_angle_deg,
-        help="Angle relative to the configured straight orientation.",
+        help="Tool tilt angle relative to the configured straight orientation.",
+    )
+    parser.add_argument(
+        "--label-angle-deg",
+        type=float,
+        default=default_label_angle_deg,
+        help=(
+            "Experimental angle label published to the recorder. If omitted, "
+            "uses --entry-angle-deg."
+        ),
     )
     parser.add_argument(
         "--straight-rpy-deg",
         type=float,
         nargs=3,
         metavar=("ROLL", "PITCH", "YAW"),
-        default=(0.0, 13.0, 0.0),
+        default=(0.0, -13.0, 0.0),
         help="Absolute straight orientation in XYZ Euler degrees.",
     )
     parser.add_argument(
@@ -82,19 +91,19 @@ def parse_args(default_angle_deg=None):
     parser.add_argument(
         "--max-travel-mm",
         type=float,
-        default=5.0,
+        default=25.0,
         help="Maximum target displacement from the pose where teleoperation starts.",
     )
     parser.add_argument(
         "--max-insertion-mm",
         type=float,
-        default=3.0,
+        default=20.0,
         help="Maximum robot-base Z-down travel from teleoperation start.",
     )
     parser.add_argument(
         "--max-retraction-mm",
         type=float,
-        default=3.0,
+        default=20.0,
         help="Maximum retraction from teleoperation start.",
     )
     parser.add_argument(
@@ -108,7 +117,10 @@ def parse_args(default_angle_deg=None):
         action="store_true",
         help="Skip the confirmation before rotating to the requested angle.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.label_angle_deg is None:
+        args.label_angle_deg = args.entry_angle_deg
+    return args
 
 
 class FixedAngleTeleop:
@@ -204,9 +216,10 @@ class FixedAngleTeleop:
             "xyz", degrees=True
         )
 
-        self.angle_pub.publish(float(self.args.entry_angle_deg))
+        self.angle_pub.publish(float(self.args.label_angle_deg))
         self.mode_pub.publish(
-            "{}deg_{}_target_rpy_{:+.3f}_{:+.3f}_{:+.3f}".format(
+            "label_{}deg_tilt_{}deg_{}_target_rpy_{:+.3f}_{:+.3f}_{:+.3f}".format(
+                self.args.label_angle_deg,
                 self.args.entry_angle_deg,
                 self.args.tilt_axis,
                 *self.target_rpy_deg,
@@ -233,11 +246,13 @@ class FixedAngleTeleop:
         if not self.args.yes:
             response = input(
                 "\nThe robot will rotate in place to target RPY {} deg.\n"
-                "Entry angle is {:.1f} degrees about {}.\n"
+                "Tilt from straight is {:.1f} degrees about {}.\n"
+                "Experimental label is {:.1f} degrees.\n"
                 "Confirm clearance, keep hand on e-stop, then type YES: ".format(
                     np.round(self.target_rpy_deg, 3),
                     self.args.entry_angle_deg,
                     self.args.tilt_axis,
+                    self.args.label_angle_deg,
                 )
             ).strip()
             if response != "YES":
@@ -411,16 +426,17 @@ class TeleopWindow(QtWidgets.QWidget):
         self._closing = False
 
         self.setWindowTitle(
-            "ATI Fixed-Angle Teleop - {:.1f} deg".format(
-                teleop.args.entry_angle_deg
+            "ATI Fixed-Angle Teleop - label {:.1f} deg".format(
+                teleop.args.label_angle_deg
             )
         )
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setMinimumSize(620, 380)
 
         title = QtWidgets.QLabel(
-            "Fixed-angle insertion: {:.1f} deg".format(
-                teleop.args.entry_angle_deg
+            "Fixed-angle insertion: {:.1f} deg label, {:.1f} deg from straight".format(
+                teleop.args.label_angle_deg,
+                teleop.args.entry_angle_deg,
             )
         )
         title.setAlignment(QtCore.Qt.AlignCenter)
@@ -549,8 +565,11 @@ class TeleopWindow(QtWidgets.QWidget):
         event.accept()
 
 
-def run(default_angle_deg=None):
-    args = parse_args(default_angle_deg=default_angle_deg)
+def run(default_angle_deg=None, default_label_angle_deg=None):
+    args = parse_args(
+        default_angle_deg=default_angle_deg,
+        default_label_angle_deg=default_label_angle_deg,
+    )
     if args.max_linear_vel > 0.5 or args.max_angular_vel > 0.1:
         print("WARNING: configured velocity exceeds the conservative test range.")
 
@@ -586,8 +605,11 @@ def run(default_angle_deg=None):
         teleop.start_teleoperation()
         print(HELP)
         print(
-            "Angle {:.1f} deg | hold-to-move speed {:.3f} mm/s".format(
-                args.entry_angle_deg, args.max_linear_vel
+            "Label angle {:.1f} deg | tilt from straight {:.1f} deg | "
+            "hold-to-move speed {:.3f} mm/s".format(
+                args.label_angle_deg,
+                args.entry_angle_deg,
+                args.max_linear_vel,
             )
         )
         application = (

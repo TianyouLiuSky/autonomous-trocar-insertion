@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch teleoperation at the absolute straight orientation (0, +13, 0)."""
+"""Launch teleoperation at the absolute straight orientation (0, -13, 0)."""
 
 from fixed_angle_teleop import run
 

@@ -20,8 +20,10 @@ from force_collection_common import (  # noqa: E402
     locked_target_rotation,
     pad_force,
     select_force_topic,
+    select_wavelength_topic,
     session_directory,
     teleop_velocity,
+    wavelength_topic_candidates,
 )
 
 
@@ -40,23 +42,32 @@ class ForceCollectionCommonTests(unittest.TestCase):
         self.assertEqual(
             force_topic_candidates("SHER20"),
             [
-                "/SHER20/eye_robot/FBGForcesTip",
                 "/eye_robot/FBGForcesTip",
+                "/SHER20/eye_robot/FBGForcesTip",
             ],
         )
 
-    def test_select_force_topic_prefers_requested_robot_namespace(self):
+    def test_wavelength_topic_candidates_include_both_eye_robot_namespaces(self):
+        self.assertEqual(
+            wavelength_topic_candidates("SHER20"),
+            [
+                "/eye_robot/WavelengthsRaw",
+                "/SHER20/eye_robot/WavelengthsRaw",
+            ],
+        )
+
+    def test_select_force_topic_prefers_legacy_eye_robot_namespace(self):
         result = select_force_topic(
             [
-                ("/eye_robot/FBGForcesTip", "std_msgs/Float64MultiArray"),
                 (
                     "/SHER20/eye_robot/FBGForcesTip",
                     "std_msgs/Float64MultiArray",
                 ),
+                ("/eye_robot/FBGForcesTip", "std_msgs/Float64MultiArray"),
             ],
             "SHER20",
         )
-        self.assertEqual(result, "/SHER20/eye_robot/FBGForcesTip")
+        self.assertEqual(result, "/eye_robot/FBGForcesTip")
 
     def test_select_force_topic_accepts_legacy_namespace(self):
         result = select_force_topic(
@@ -65,24 +76,42 @@ class ForceCollectionCommonTests(unittest.TestCase):
         )
         self.assertEqual(result, "/eye_robot/FBGForcesTip")
 
+    def test_select_wavelength_topic_prefers_legacy_eye_robot_namespace(self):
+        result = select_wavelength_topic(
+            [
+                (
+                    "/SHER20/eye_robot/WavelengthsRaw",
+                    "std_msgs/Float64MultiArray",
+                ),
+                ("/eye_robot/WavelengthsRaw", "std_msgs/Float64MultiArray"),
+            ],
+            "SHER20",
+        )
+        self.assertEqual(result, "/eye_robot/WavelengthsRaw")
+
     def test_default_locked_orientations(self):
         straight = locked_target_rotation(
-            straight_rpy_deg=[0.0, 13.0, 0.0],
+            straight_rpy_deg=[0.0, -13.0, 0.0],
             entry_angle_deg=0.0,
         )
-        angled = locked_target_rotation(
-            straight_rpy_deg=[0.0, 13.0, 0.0],
-            entry_angle_deg=30.0,
+        thirty_from_horizontal = locked_target_rotation(
+            straight_rpy_deg=[0.0, -13.0, 0.0],
+            entry_angle_deg=60.0,
         )
         np.testing.assert_allclose(
             straight.as_euler("xyz", degrees=True),
-            [0.0, 13.0, 0.0],
+            [0.0, -13.0, 0.0],
             atol=1e-10,
         )
         np.testing.assert_allclose(
-            angled.as_euler("xyz", degrees=True),
-            [0.0, 43.0, 0.0],
+            thirty_from_horizontal.as_euler("xyz", degrees=True),
+            [0.0, 47.0, 0.0],
             atol=1e-10,
+        )
+        relative = thirty_from_horizontal * straight.inv()
+        self.assertAlmostEqual(
+            np.linalg.norm(relative.as_rotvec()) * 180.0 / math.pi,
+            60.0,
         )
 
     def test_ema_update_preserves_missing_channel(self):

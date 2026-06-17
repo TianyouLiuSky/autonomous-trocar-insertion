@@ -17,20 +17,32 @@ FORCE_CHANNEL_COUNT = 4
 def force_topic_candidates(robot_name):
     """Return force-topic aliases used by the current EyeRobot codebase."""
     return [
-        "/{}/eye_robot/FBGForcesTip".format(robot_name),
         "/eye_robot/FBGForcesTip",
+        "/{}/eye_robot/FBGForcesTip".format(robot_name),
     ]
 
 
-def select_force_topic(published_topics, robot_name):
-    """Select the best currently published FBG force topic, if one exists."""
+def wavelength_topic_candidates(robot_name):
+    """Return raw-wavelength aliases used by the current EyeRobot codebase."""
+    return [
+        "/eye_robot/WavelengthsRaw",
+        "/{}/eye_robot/WavelengthsRaw".format(robot_name),
+    ]
+
+
+def _published_topic_names(published_topics):
     published = set()
     for item in published_topics or []:
         if isinstance(item, (tuple, list)):
             published.add(str(item[0]))
         else:
             published.add(str(item))
+    return published
 
+
+def select_force_topic(published_topics, robot_name):
+    """Select the best currently published FBG force topic, if one exists."""
+    published = _published_topic_names(published_topics)
     candidates = force_topic_candidates(robot_name)
     for candidate in candidates:
         if candidate in published:
@@ -38,6 +50,22 @@ def select_force_topic(published_topics, robot_name):
 
     suffix_matches = sorted(
         topic for topic in published if topic.endswith("/eye_robot/FBGForcesTip")
+    )
+    if len(suffix_matches) == 1:
+        return suffix_matches[0]
+    return None
+
+
+def select_wavelength_topic(published_topics, robot_name):
+    """Select the best currently published raw-wavelength topic, if one exists."""
+    published = _published_topic_names(published_topics)
+    candidates = wavelength_topic_candidates(robot_name)
+    for candidate in candidates:
+        if candidate in published:
+            return candidate
+
+    suffix_matches = sorted(
+        topic for topic in published if topic.endswith("/eye_robot/WavelengthsRaw")
     )
     if len(suffix_matches) == 1:
         return suffix_matches[0]

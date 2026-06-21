@@ -337,6 +337,30 @@ def finite_stats(values):
     }
 
 
+def padded_axis_range(values, padding_fraction=0.15, minimum_span=0.1):
+    """Return a padded axis range for finite plot values."""
+    values = np.asarray(values, dtype=float).reshape(-1)
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return None
+
+    minimum = float(np.min(values))
+    maximum = float(np.max(values))
+    if not math.isfinite(minimum) or not math.isfinite(maximum):
+        return None
+
+    padding_fraction = max(0.0, float(padding_fraction))
+    minimum_span = max(0.0, float(minimum_span))
+    span = maximum - minimum
+    if span < minimum_span:
+        center = 0.5 * (minimum + maximum)
+        half_span = 0.5 * minimum_span
+        return center - half_span, center + half_span
+
+    padding = span * padding_fraction
+    return minimum - padding, maximum + padding
+
+
 def safe_json_number(value):
     value = float(value)
     return value if math.isfinite(value) else None

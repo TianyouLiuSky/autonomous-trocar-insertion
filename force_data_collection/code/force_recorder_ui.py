@@ -27,6 +27,7 @@ from force_collection_common import (
     insertion_condition_label,
     insertion_metrics,
     pad_force,
+    padded_axis_range,
     safe_json_number,
     select_force_topic,
     select_wavelength_topic,
@@ -105,6 +106,8 @@ def parse_args():
     parser.add_argument("--data-dir", default=str(default_data_dir))
     parser.add_argument("--ema-alpha", type=float, default=0.2)
     parser.add_argument("--plot-seconds", type=float, default=20.0)
+    parser.add_argument("--plot-y-padding-fraction", type=float, default=0.15)
+    parser.add_argument("--plot-y-min-span", type=float, default=0.1)
     parser.add_argument("--force-unit", default="N")
     parser.add_argument(
         "--default-angle-deg",
@@ -849,6 +852,7 @@ class RecorderWindow(QtWidgets.QWidget):
         self.plot.setLabel(
             "left", "Force", units=recorder.args.force_unit
         )
+        self.plot.setXRange(-float(recorder.args.plot_seconds), 0.0, padding=0.0)
         self.plot.addLegend()
         self.raw_curve = self.plot.plot(
             pen=pg.mkPen("#6fa8dc", width=1), name="Raw"
@@ -878,6 +882,20 @@ class RecorderWindow(QtWidgets.QWidget):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(50)
+
+    def update_plot_ranges(self, raw, filtered):
+        self.plot.setXRange(
+            -float(self.recorder.args.plot_seconds),
+            0.0,
+            padding=0.0,
+        )
+        y_range = padded_axis_range(
+            np.concatenate((raw, filtered)),
+            padding_fraction=self.recorder.args.plot_y_padding_fraction,
+            minimum_span=self.recorder.args.plot_y_min_span,
+        )
+        if y_range is not None:
+            self.plot.setYRange(y_range[0], y_range[1], padding=0.0)
 
     def show_error(self, title, error):
         QtWidgets.QMessageBox.critical(self, title, str(error))
@@ -964,6 +982,7 @@ class RecorderWindow(QtWidgets.QWidget):
                 filtered = filtered - baseline[channel]
             self.raw_curve.setData(times, raw)
             self.filtered_curve.setData(times, filtered)
+            self.update_plot_ranges(raw, filtered)
 
         if wavelength_items:
             newest_wavelength = wavelength_items[-1][0]
@@ -1081,6 +1100,12 @@ def main():
     args = parse_args()
     if not 0.0 < args.ema_alpha <= 1.0:
         raise ValueError("--ema-alpha must be in (0, 1]")
+    if args.plot_seconds <= 0.0:
+        raise ValueError("--plot-seconds must be positive")
+    if args.plot_y_padding_fraction < 0.0:
+        raise ValueError("--plot-y-padding-fraction must be non-negative")
+    if args.plot_y_min_span <= 0.0:
+        raise ValueError("--plot-y-min-span must be positive")
 
     rospy.init_node(
         "ati_force_data_recorder", anonymous=True, disable_signals=True

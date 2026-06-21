@@ -125,6 +125,10 @@ Use two terminals on the robot computer.
    one second of force data as the baseline. Press **Start Collection** or `S`.
    The recorder UI shows the active condition at the top: `DIRECT DOWN (0 deg)`
    or `30 DEG OBLIQUE`.
+   The force chart keeps a fixed recent-time width from `--plot-seconds` while
+   automatically rescaling its vertical force range to the visible raw and EMA
+   traces. Tune the vertical padding with `--plot-y-padding-fraction` and the
+   minimum displayed span with `--plot-y-min-span`.
 8. Perform the insertion with the teleoperation keyboard.
 9. Press **Finish and Save** or `F` in the recorder.
 10. Retract the tool and press `Q` in the movement-control window.

@@ -22,6 +22,7 @@ from force_collection_common import (  # noqa: E402
     insertion_condition_label,
     locked_target_rotation,
     pad_force,
+    padded_axis_range,
     select_force_topic,
     select_wavelength_topic,
     session_directory,
@@ -273,6 +274,17 @@ class ForceCollectionCommonTests(unittest.TestCase):
             insertion_condition_label(45.0),
             "45.0 DEG INSERTION",
         )
+
+    def test_padded_axis_range_adds_fractional_padding(self):
+        result = padded_axis_range([0.0, 10.0], padding_fraction=0.1)
+        self.assertEqual(result, (-1.0, 11.0))
+
+    def test_padded_axis_range_uses_minimum_span_for_flat_signal(self):
+        result = padded_axis_range([5.0, 5.0, math.nan], minimum_span=2.0)
+        self.assertEqual(result, (4.0, 6.0))
+
+    def test_padded_axis_range_returns_none_without_finite_values(self):
+        self.assertIsNone(padded_axis_range([math.nan, math.inf, -math.inf]))
 
 
 if __name__ == "__main__":

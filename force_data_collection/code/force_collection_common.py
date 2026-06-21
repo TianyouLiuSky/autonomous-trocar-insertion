@@ -147,6 +147,28 @@ def teleop_velocity(
     return velocity * (float(speed) / norm)
 
 
+def commanded_insertion_axis(
+    tool_axis,
+    entry_angle_deg,
+    direct_down_threshold_deg=1.0,
+):
+    """Return the base-frame insertion axis used by C/V teleoperation."""
+    try:
+        entry_angle = float(entry_angle_deg)
+    except (TypeError, ValueError):
+        entry_angle = math.nan
+    if math.isfinite(entry_angle) and abs(entry_angle) <= direct_down_threshold_deg:
+        return np.array([0.0, 0.0, -1.0], dtype=float)
+
+    tool_axis = np.asarray(tool_axis, dtype=float)
+    if tool_axis.shape != (3,):
+        raise ValueError("tool_axis must contain exactly 3 values")
+    axis_norm = float(np.linalg.norm(tool_axis))
+    if not math.isfinite(axis_norm) or axis_norm == 0.0:
+        raise ValueError("tool_axis must be finite and non-zero")
+    return tool_axis / axis_norm
+
+
 def workspace_center(workspace_min_mm, workspace_max_mm):
     """Return the midpoint of a 3D robot workspace box."""
     workspace_min_mm = np.asarray(workspace_min_mm, dtype=float)

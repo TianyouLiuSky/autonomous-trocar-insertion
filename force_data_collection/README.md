@@ -99,22 +99,23 @@ Use two terminals on the robot computer.
    |---|---|
    | Hold `W` / `S` | Robot-base X+ / X- |
    | Hold `A` / `D` | Robot-base Y+ / Y- |
-   | Hold `C` / `V` | Insert along locked tool axis / retract along locked tool axis |
+   | Hold `C` / `V` | Insert / retract |
    | Space | Stop and hold the current position |
    | `Q` | Stop and quit |
 
-   `W/S` and `A/D` are lateral robot-base motions. `C/V` follow the locked
-   insertion axis computed from the tool orientation, so the 30-degree condition
-   inserts along the oblique needle direction instead of robot-base vertical Z.
-   Translation stops as soon as the movement key is released and also stops if
-   the control window loses focus. No key changes the tool orientation.
+   `W/S` and `A/D` are lateral robot-base motions. In the direct-down script,
+   `C/V` are pure robot-base Z down/up, even though the locked straight
+   orientation is `(0, -13, 0)`. In the 30-degree script, `C/V` follow the
+   locked oblique insertion axis computed from the tool orientation. Translation
+   stops as soon as the movement key is released and also stops if the control
+   window loses focus. No key changes the tool orientation.
 
    The motion window reports `Command gate`. This code has no force/contact
    stop. It can suppress translation if orientation error exceeds 2 degrees, a
    relative travel limit is reached, or the command would push farther outside
-   the configured workspace. For oblique insertion, it also suppresses
-   insertion if commanded horizontal progress stalls while `C` is held; the
-   gate reports `horizontal stall guard` and clears when `C` is released.
+   the configured workspace. For oblique insertion, it also suppresses the
+   Z-down component if commanded horizontal progress stalls while `C` is held;
+   the gate reports `horizontal stall guard` and clears when `C` is released.
    SHER's lower-level force-control/contact behavior is outside this script and
    must remain enabled unless the robot's responsible operator changes its
    controller mode.
@@ -136,10 +137,10 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
   script is suppressing the requested translation.
 - If `Command gate` reports a workspace limit, the current key command would
   move the tip past the configured workspace boundary.
-- If `Command gate` reports `horizontal stall guard`, the tool-axis insertion
+- If `Command gate` reports `horizontal stall guard`, the oblique insertion
   command needs horizontal motion, but the measured horizontal pose progress is
-  too small. Release `C`, retract or reposition, and do not keep inserting
-  vertically into the obstruction.
+  too small. The script blocks Z-down motion to prevent tool bending. Release
+  `C`, retract or reposition, and do not keep pushing into the obstruction.
 - If the displayed command vector changes while `C` is held but the robot does
   not advance along the tool axis, SHER's lower-level controller is limiting
   the motion.
@@ -163,10 +164,10 @@ The conservative defaults are:
   `z = -13..30 mm`
 - Automatic pre-teleop center target: `(-16.0, -109.0, 8.5) mm`
 - Workspace and centering tolerance: `0.5 mm`
-- Maximum insertion along the locked tool axis from teleoperation start:
-  `20.0 mm`
-- Maximum retraction along the locked tool axis from teleoperation start:
-  `20.0 mm`
+- Maximum insertion from teleoperation start: `20.0 mm`
+- Maximum retraction from teleoperation start: `20.0 mm`
+- Direct-down C/V axis: robot-base Z
+- Oblique C/V axis: locked tool insertion axis
 - Maximum total displacement from teleoperation start: `25.0 mm`
 - Pose-staleness stop: `0.5 s`
 - Oblique horizontal-stall guard: enabled for tool axes with horizontal

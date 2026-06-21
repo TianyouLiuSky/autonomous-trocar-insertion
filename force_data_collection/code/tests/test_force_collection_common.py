@@ -15,6 +15,7 @@ sys.path.insert(0, str(CODE_DIR))
 from force_collection_common import (  # noqa: E402
     apply_workspace_limits,
     clip_norm,
+    commanded_insertion_axis,
     ema_update,
     force_topic_candidates,
     insertion_metrics,
@@ -196,6 +197,23 @@ class ForceCollectionCommonTests(unittest.TestCase):
     def test_teleop_velocity_rejects_zero_down_axis(self):
         with self.assertRaises(ValueError):
             teleop_velocity({"c"}, speed=0.2, down_axis=[0.0, 0.0, 0.0])
+
+    def test_commanded_insertion_axis_uses_base_z_for_direct_down(self):
+        result = commanded_insertion_axis(
+            tool_axis=[0.225, 0.0, -0.974],
+            entry_angle_deg=0.0,
+        )
+        np.testing.assert_allclose(result, [0.0, 0.0, -1.0])
+
+    def test_commanded_insertion_axis_uses_tool_axis_for_oblique(self):
+        result = commanded_insertion_axis(
+            tool_axis=[-0.731, 0.0, -0.682],
+            entry_angle_deg=60.0,
+        )
+        np.testing.assert_allclose(
+            result,
+            np.array([-0.731, 0.0, -0.682]) / np.linalg.norm([-0.731, 0.0, -0.682]),
+        )
 
     def test_workspace_center_uses_midpoint(self):
         result = workspace_center(

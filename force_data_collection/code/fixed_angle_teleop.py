@@ -21,6 +21,7 @@ from std_msgs.msg import Float64, String
 from force_collection_common import (
     apply_workspace_limits,
     clip_norm,
+    commanded_insertion_axis,
     locked_target_rotation,
     teleop_velocity,
     workspace_center,
@@ -32,7 +33,7 @@ Fixed-angle force insertion teleoperation
 
   Hold W / S : robot-base X+ / X-
   Hold A / D : robot-base Y+ / Y-
-  Hold C / V : insert along locked tool axis / retract along locked tool axis
+  Hold C / V : direct-down base Z, oblique locked-axis insertion/retraction
   Space      : stop and hold the current position
   H          : print this help
   Q          : stop and quit
@@ -193,16 +194,25 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
     parser.add_argument(
         "--horizontal-stall-min-progress-mm-s",
         type=float,
-        default=0.03,
+        default=0.02,
         help="Minimum acceptable horizontal progress speed during oblique insertion.",
     )
     parser.add_argument(
         "--horizontal-stall-progress-ratio",
         type=float,
-        default=0.20,
+        default=0.10,
         help=(
             "Minimum actual/expected horizontal progress ratio during oblique "
             "insertion."
+        ),
+    )
+    parser.add_argument(
+        "--direct-down-base-z-threshold-deg",
+        type=float,
+        default=1.0,
+        help=(
+            "Use pure robot-base Z for C/V when --entry-angle-deg is within "
+            "this tolerance of direct-down."
         ),
     )
     parser.add_argument(
@@ -240,6 +250,8 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
         parser.error("--horizontal-stall-min-progress-mm-s must be non-negative")
     if args.horizontal_stall_progress_ratio < 0.0:
         parser.error("--horizontal-stall-progress-ratio must be non-negative")
+    if args.direct_down_base_z_threshold_deg < 0.0:
+        parser.error("--direct-down-base-z-threshold-deg must be non-negative")
     return args
 
 
@@ -252,6 +264,7 @@ class FixedAngleTeleop:
         self.pose_history = deque(maxlen=1000)
         self.origin_position = None
         self.target_rotation = None
+        self.tool_insertion_axis = None
         self.insertion_axis = None
         self.local_x = None
         self.local_y = None
@@ -340,7 +353,12 @@ class FixedAngleTeleop:
         matrix = self.target_rotation.as_matrix()
         self.local_x = matrix[:, 0]
         self.local_y = matrix[:, 1]
-        self.insertion_axis = -matrix[:, 2]
+        self.tool_insertion_axis = -matrix[:, 2]
+        self.insertion_axis = commanded_insertion_axis(
+            self.tool_insertion_axis,
+            self.args.entry_angle_deg,
+            self.args.direct_down_base_z_threshold_deg,
+        )
         self.target_rpy_deg = self.target_rotation.as_euler(
             "xyz", degrees=True
         )
@@ -673,6 +691,13 @@ class FixedAngleTeleop:
             return "horizontal stall guard"
         return None
 
+    @staticmethod
+    def suppress_z_down(linear_velocity):
+        linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
+        if linear_velocity[2] < 0.0:
+            linear_velocity[2] = 0.0
+        return linear_velocity
+
     def _apply_travel_limits(self, linear_velocity):
         linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
         limit_reason = None
@@ -746,7 +771,7 @@ class FixedAngleTeleop:
             limit_reason,
         )
         if stall_reason is not None:
-            linear[:] = 0.0
+            linear = self.suppress_z_down(linear)
             self.last_block_reason = stall_reason
         self.last_linear_command = linear.copy()
 
@@ -822,11 +847,12 @@ class TeleopWindow(QtWidgets.QWidget):
 
         instructions = QtWidgets.QLabel(
             "Hold W/S: robot X+ / X-       Hold A/D: robot Y+ / Y-\n"
-            "Hold C: insert along tool     Hold V: retract along tool\n"
+            "Hold C: insert               Hold V: retract\n"
             "Space: stop    Q: quit\n\n"
             "Click this window before controlling the robot.\n"
             "Releasing a key or changing window focus stops translation.\n"
-            "For oblique insertion, stalled horizontal progress blocks insertion."
+            "Direct-down C/V uses base Z. Oblique C/V follows the locked axis.\n"
+            "For oblique insertion, stalled horizontal progress blocks Z-down motion."
         )
         instructions.setAlignment(QtCore.Qt.AlignCenter)
         instructions.setStyleSheet("font-size: 15px;")
@@ -981,7 +1007,12 @@ def run(default_angle_deg=None, default_label_angle_deg=None):
             )
         )
         print(
-            "Tool insertion axis in robot base frame: {}".format(
+            "Tool axis in robot base frame: {}".format(
+                np.round(teleop.tool_insertion_axis, 4)
+            )
+        )
+        print(
+            "Commanded insertion axis in robot base frame: {}".format(
                 np.round(teleop.insertion_axis, 4)
             )
         )

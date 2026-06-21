@@ -9,6 +9,7 @@ angle is applied relative to that reference, then the target remains locked.
 import argparse
 import sys
 import time
+from collections import deque
 
 import numpy as np
 import rospy
@@ -161,6 +162,50 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
         help="Suppress linear motion while orientation error exceeds this value.",
     )
     parser.add_argument(
+        "--disable-horizontal-stall-guard",
+        action="store_true",
+        help=(
+            "Disable the oblique-insertion guard that stops insertion when "
+            "horizontal pose progress stalls."
+        ),
+    )
+    parser.add_argument(
+        "--horizontal-stall-window-s",
+        type=float,
+        default=0.6,
+        help="Pose-history window used to detect stalled horizontal progress.",
+    )
+    parser.add_argument(
+        "--horizontal-stall-axis-min",
+        type=float,
+        default=0.35,
+        help=(
+            "Minimum horizontal fraction of the tool axis required before the "
+            "stall guard is active."
+        ),
+    )
+    parser.add_argument(
+        "--horizontal-stall-min-axial-vel",
+        type=float,
+        default=0.03,
+        help="Minimum insertion-axis speed considered an active insertion command.",
+    )
+    parser.add_argument(
+        "--horizontal-stall-min-progress-mm-s",
+        type=float,
+        default=0.03,
+        help="Minimum acceptable horizontal progress speed during oblique insertion.",
+    )
+    parser.add_argument(
+        "--horizontal-stall-progress-ratio",
+        type=float,
+        default=0.20,
+        help=(
+            "Minimum actual/expected horizontal progress ratio during oblique "
+            "insertion."
+        ),
+    )
+    parser.add_argument(
         "--yes",
         action="store_true",
         help="Skip the confirmation before rotating to the requested angle.",
@@ -185,6 +230,16 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
         parser.error("--center-settle-s must be non-negative")
     if args.center_timeout_s <= 0.0:
         parser.error("--center-timeout-s must be positive")
+    if args.horizontal_stall_window_s <= 0.0:
+        parser.error("--horizontal-stall-window-s must be positive")
+    if args.horizontal_stall_axis_min < 0.0:
+        parser.error("--horizontal-stall-axis-min must be non-negative")
+    if args.horizontal_stall_min_axial_vel < 0.0:
+        parser.error("--horizontal-stall-min-axial-vel must be non-negative")
+    if args.horizontal_stall_min_progress_mm_s < 0.0:
+        parser.error("--horizontal-stall-min-progress-mm-s must be non-negative")
+    if args.horizontal_stall_progress_ratio < 0.0:
+        parser.error("--horizontal-stall-progress-ratio must be non-negative")
     return args
 
 
@@ -194,6 +249,7 @@ class FixedAngleTeleop:
         self.position = None
         self.quaternion = None
         self.pose_receipt_time = None
+        self.pose_history = deque(maxlen=1000)
         self.origin_position = None
         self.target_rotation = None
         self.insertion_axis = None
@@ -203,6 +259,8 @@ class FixedAngleTeleop:
         self.last_linear_command = np.zeros(3)
         self.last_action = "initializing"
         self.last_block_reason = "none"
+        self.horizontal_stall_latched = False
+        self.insertion_command_start_time = None
         self.workspace_min = np.asarray(args.workspace_min_mm, dtype=float)
         self.workspace_max = np.asarray(args.workspace_max_mm, dtype=float)
 
@@ -254,6 +312,7 @@ class FixedAngleTeleop:
             dtype=float,
         )
         self.pose_receipt_time = time.monotonic()
+        self.pose_history.append((self.pose_receipt_time, self.position.copy()))
 
     def wait_for_pose(self, timeout_s=10.0):
         deadline = time.monotonic() + timeout_s
@@ -529,6 +588,91 @@ class FixedAngleTeleop:
             return self.down_axis
         return axis / axis_norm
 
+    def horizontal_axis_for_guard(self):
+        axis = self.axial_motion_axis()
+        horizontal = axis.copy()
+        horizontal[2] = 0.0
+        horizontal_norm = float(np.linalg.norm(horizontal))
+        if horizontal_norm < self.args.horizontal_stall_axis_min:
+            return None, horizontal_norm
+        return horizontal / horizontal_norm, horizontal_norm
+
+    def horizontal_progress_rate(self, horizontal_axis, start_time=None):
+        if len(self.pose_history) < 2:
+            return None
+        latest_time, latest_position = self.pose_history[-1]
+        cutoff = latest_time - self.args.horizontal_stall_window_s
+        if start_time is not None:
+            cutoff = max(cutoff, start_time)
+        oldest_time = None
+        oldest_position = None
+        for sample_time, sample_position in self.pose_history:
+            if sample_time >= cutoff:
+                oldest_time = sample_time
+                oldest_position = sample_position
+                break
+        if oldest_time is None or oldest_position is None:
+            return None
+        elapsed = latest_time - oldest_time
+        minimum_elapsed = 0.5 * self.args.horizontal_stall_window_s
+        if elapsed < minimum_elapsed:
+            return None
+        displacement = latest_position - oldest_position
+        return float(np.dot(displacement, horizontal_axis) / elapsed)
+
+    def horizontal_stall_guard_reason(
+        self,
+        linear_velocity,
+        active_keys,
+        limit_reason,
+    ):
+        if self.args.disable_horizontal_stall_guard:
+            self.horizontal_stall_latched = False
+            self.insertion_command_start_time = None
+            return None
+
+        axial_axis = self.axial_motion_axis()
+        axial_speed = float(np.dot(linear_velocity, axial_axis))
+        inserting = (
+            "c" in active_keys
+            and axial_speed > self.args.horizontal_stall_min_axial_vel
+        )
+        if not inserting:
+            self.horizontal_stall_latched = False
+            self.insertion_command_start_time = None
+            return None
+        if self.insertion_command_start_time is None:
+            self.insertion_command_start_time = time.monotonic()
+
+        horizontal_axis, horizontal_fraction = self.horizontal_axis_for_guard()
+        if horizontal_axis is None:
+            self.horizontal_stall_latched = False
+            self.insertion_command_start_time = None
+            return None
+
+        if self.horizontal_stall_latched:
+            return "horizontal stall guard"
+
+        if limit_reason == "workspace limit":
+            self.horizontal_stall_latched = True
+            return "horizontal stall guard"
+
+        progress_rate = self.horizontal_progress_rate(
+            horizontal_axis,
+            start_time=self.insertion_command_start_time,
+        )
+        if progress_rate is None:
+            return None
+        expected_rate = axial_speed * horizontal_fraction
+        minimum_rate = max(
+            self.args.horizontal_stall_min_progress_mm_s,
+            expected_rate * self.args.horizontal_stall_progress_ratio,
+        )
+        if progress_rate < minimum_rate:
+            self.horizontal_stall_latched = True
+            return "horizontal stall guard"
+        return None
+
     def _apply_travel_limits(self, linear_velocity):
         linear_velocity = np.asarray(linear_velocity, dtype=float).copy()
         limit_reason = None
@@ -596,6 +740,14 @@ class FixedAngleTeleop:
                     self.args.linear_hold_error_deg,
                 )
             )
+        stall_reason = self.horizontal_stall_guard_reason(
+            linear,
+            active_keys,
+            limit_reason,
+        )
+        if stall_reason is not None:
+            linear[:] = 0.0
+            self.last_block_reason = stall_reason
         self.last_linear_command = linear.copy()
 
         if self.last_block_reason != "none":
@@ -620,6 +772,8 @@ class FixedAngleTeleop:
         return orientation_error_deg, insertion, lateral
 
     def stop_translation(self):
+        self.horizontal_stall_latched = False
+        self.insertion_command_start_time = None
         self.last_linear_command[:] = 0.0
         self.linear_pub.publish(0.0, 0.0, 0.0)
         if self.last_action != "hold":
@@ -671,7 +825,8 @@ class TeleopWindow(QtWidgets.QWidget):
             "Hold C: insert along tool     Hold V: retract along tool\n"
             "Space: stop    Q: quit\n\n"
             "Click this window before controlling the robot.\n"
-            "Releasing a key or changing window focus stops translation."
+            "Releasing a key or changing window focus stops translation.\n"
+            "For oblique insertion, stalled horizontal progress blocks insertion."
         )
         instructions.setAlignment(QtCore.Qt.AlignCenter)
         instructions.setStyleSheet("font-size: 15px;")
@@ -856,6 +1011,17 @@ def run(default_angle_deg=None, default_label_angle_deg=None):
                 args.max_linear_vel,
             )
         )
+        if args.disable_horizontal_stall_guard:
+            print("Horizontal stall guard: disabled")
+        else:
+            print(
+                "Horizontal stall guard: window {:.2f} s, axis min {:.2f}, "
+                "progress min {:.3f} mm/s".format(
+                    args.horizontal_stall_window_s,
+                    args.horizontal_stall_axis_min,
+                    args.horizontal_stall_min_progress_mm_s,
+                )
+            )
         application = (
             QtWidgets.QApplication.instance()
             or QtWidgets.QApplication(sys.argv)

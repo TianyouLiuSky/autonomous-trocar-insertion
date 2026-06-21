@@ -112,9 +112,12 @@ Use two terminals on the robot computer.
    The motion window reports `Command gate`. This code has no force/contact
    stop. It can suppress translation if orientation error exceeds 2 degrees, a
    relative travel limit is reached, or the command would push farther outside
-   the configured workspace. SHER's lower-level force-control/contact behavior
-   is outside this script and must remain enabled unless the robot's responsible
-   operator changes its controller mode.
+   the configured workspace. For oblique insertion, it also suppresses
+   insertion if commanded horizontal progress stalls while `C` is held; the
+   gate reports `horizontal stall guard` and clears when `C` is released.
+   SHER's lower-level force-control/contact behavior is outside this script and
+   must remain enabled unless the robot's responsible operator changes its
+   controller mode.
 
 7. In the recorder, optionally press **Tare** or `T`. A manual tare is retained
    for that trial. If you do not tare, Start automatically uses the most recent
@@ -133,6 +136,10 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
   script is suppressing the requested translation.
 - If `Command gate` reports a workspace limit, the current key command would
   move the tip past the configured workspace boundary.
+- If `Command gate` reports `horizontal stall guard`, the tool-axis insertion
+  command needs horizontal motion, but the measured horizontal pose progress is
+  too small. Release `C`, retract or reposition, and do not keep inserting
+  vertically into the obstruction.
 - If the displayed command vector changes while `C` is held but the robot does
   not advance along the tool axis, SHER's lower-level controller is limiting
   the motion.
@@ -162,6 +169,8 @@ The conservative defaults are:
   `20.0 mm`
 - Maximum total displacement from teleoperation start: `25.0 mm`
 - Pose-staleness stop: `0.5 s`
+- Oblique horizontal-stall guard: enabled for tool axes with horizontal
+  component at least `0.35`; measured over `0.6 s`
 
 Example overrides:
 

@@ -44,7 +44,11 @@ Keep a hand on the physical emergency stop.
 """
 
 
-def parse_args(default_angle_deg=None, default_label_angle_deg=None):
+def parse_args(
+    default_angle_deg=None,
+    default_label_angle_deg=None,
+    default_center_position_mm=None,
+):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot-name", default="SHER20")
     parser.add_argument(
@@ -119,10 +123,11 @@ def parse_args(default_angle_deg=None, default_label_angle_deg=None):
         type=float,
         nargs=3,
         metavar=("X", "Y", "Z"),
-        default=None,
+        default=default_center_position_mm,
         help=(
             "Tip position to move to before teleoperation. Defaults to the "
-            "workspace midpoint; use NaN for any axis that should not be moved."
+            "script-specific target or workspace midpoint; use NaN for any "
+            "axis that should not be moved."
         ),
     )
     parser.add_argument(
@@ -970,10 +975,15 @@ class TeleopWindow(QtWidgets.QWidget):
         event.accept()
 
 
-def run(default_angle_deg=None, default_label_angle_deg=None):
+def run(
+    default_angle_deg=None,
+    default_label_angle_deg=None,
+    default_center_position_mm=None,
+):
     args = parse_args(
         default_angle_deg=default_angle_deg,
         default_label_angle_deg=default_label_angle_deg,
+        default_center_position_mm=default_center_position_mm,
     )
     if args.max_linear_vel > 0.5 or args.max_angular_vel > 0.1:
         print("WARNING: configured velocity exceeds the conservative test range.")

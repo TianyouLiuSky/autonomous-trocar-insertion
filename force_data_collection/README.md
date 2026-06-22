@@ -89,9 +89,14 @@ Use two terminals on the robot computer.
 5. For either script, confirm that the tool has clearance to rotate. The
    30-degree script rotates 60 degrees away from straight/direct-down. Both
    scripts wait until the locked orientation settles. After orientation setup,
-   the script automatically moves the tip to the workspace center
-   `(-16.0, -109.0, 8.5)` mm within `0.5 mm` tolerance, unless launched with
-   `--skip-centering`.
+   the script automatically moves the tip to its pre-teleop start target within
+   `0.5 mm` tolerance, unless launched with `--skip-centering`.
+
+   - Direct down uses the workspace midpoint `(-16.0, -109.0, 8.5)` mm.
+   - 30-degree oblique uses `(-5.5, -109.0, 17.0)` mm. This is intentionally
+     closer to the observed upper/right fixed-orientation limit so the tool has
+     more usable shaft-direction insertion travel before the lower/left
+     translation limit around `x = -19.7, z = 3.9`.
 6. A dedicated movement-control window opens. Click that window, then hold the
    keys to move to the desired starting position:
 
@@ -166,7 +171,8 @@ The conservative defaults are:
 - Maximum angular velocity while holding angle: `0.05 rad/s`
 - Workspace bounds: `x = -42..10 mm`, `y = -133..-85 mm`,
   `z = -13..30 mm`
-- Automatic pre-teleop center target: `(-16.0, -109.0, 8.5) mm`
+- Direct-down pre-teleop target: `(-16.0, -109.0, 8.5) mm`
+- 30-degree pre-teleop target: `(-5.5, -109.0, 17.0) mm`
 - Workspace and centering tolerance: `0.5 mm`
 - Maximum insertion from teleoperation start: `20.0 mm`
 - Maximum retraction from teleoperation start: `20.0 mm`

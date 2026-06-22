@@ -151,13 +151,12 @@ def commanded_insertion_axis(
     tool_axis,
     entry_angle_deg,
     direct_down_threshold_deg=1.0,
+    mode="auto",
 ):
     """Return the base-frame insertion axis used by C/V teleoperation."""
-    try:
-        entry_angle = float(entry_angle_deg)
-    except (TypeError, ValueError):
-        entry_angle = math.nan
-    if math.isfinite(entry_angle) and abs(entry_angle) <= direct_down_threshold_deg:
+    if mode not in ("auto", "base-z", "tool-axis"):
+        raise ValueError("mode must be auto, base-z, or tool-axis")
+    if mode == "base-z":
         return np.array([0.0, 0.0, -1.0], dtype=float)
 
     tool_axis = np.asarray(tool_axis, dtype=float)
@@ -166,6 +165,15 @@ def commanded_insertion_axis(
     axis_norm = float(np.linalg.norm(tool_axis))
     if not math.isfinite(axis_norm) or axis_norm == 0.0:
         raise ValueError("tool_axis must be finite and non-zero")
+    if mode == "tool-axis":
+        return tool_axis / axis_norm
+
+    try:
+        entry_angle = float(entry_angle_deg)
+    except (TypeError, ValueError):
+        entry_angle = math.nan
+    if math.isfinite(entry_angle) and abs(entry_angle) <= direct_down_threshold_deg:
+        return np.array([0.0, 0.0, -1.0], dtype=float)
     return tool_axis / axis_norm
 
 
@@ -268,6 +276,8 @@ def insertion_condition_label(angle_deg, tolerance_deg=0.5):
     tolerance_deg = abs(float(tolerance_deg))
     if abs(angle) <= tolerance_deg:
         return "DIRECT DOWN (0 deg)"
+    if abs(angle - 20.0) <= tolerance_deg:
+        return "PERPENDICULAR (20 deg)"
     if abs(angle - 30.0) <= tolerance_deg:
         return "30 DEG OBLIQUE"
     return "{:.1f} DEG INSERTION".format(angle)

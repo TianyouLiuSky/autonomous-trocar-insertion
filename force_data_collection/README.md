@@ -1,7 +1,7 @@
 # Force Data Collection
 
 This directory contains a standalone workflow for collecting trocar penetration
-force at a fixed direct-down or 30-degree entry angle.
+force at fixed direct-down, perpendicular-to-eye, or 30-degree entry angle.
 
 ## Directory Layout
 
@@ -9,6 +9,7 @@ force at a fixed direct-down or 30-degree entry angle.
 force_data_collection/
 ├── code/
 │   ├── direct_down_insertion.py
+│   ├── perpendicular_insertion.py
 │   ├── insertion_30deg.py
 │   ├── fixed_angle_teleop.py
 │   ├── force_recorder_ui.py
@@ -26,6 +27,9 @@ The straight/direct-down robot orientation is the absolute XYZ Euler
 orientation `(roll, pitch, yaw) = (0, -13, 0)` degrees.
 
 - `direct_down_insertion.py` moves to and locks `(0, -13, 0)`.
+- `perpendicular_insertion.py` moves to and locks the perpendicular-to-eye
+  orientation `(0, +20, 0)`. This is treated as an absolute robot RPY target,
+  and `C/V` insertion follows the locked tool axis.
 - `insertion_30deg.py` represents the 30-degree-from-horizontal oblique
   condition. Since straight/direct-down is vertical, the script applies
   60 degrees about tool-local Y from straight. With the default positive tilt
@@ -62,7 +66,7 @@ Use two terminals on the robot computer.
 
 1. Place the phantom and tool in their correct experimental positions.
 2. Keep the tool clear of the phantom. The control script will rotate to the
-   configured straight orientation `(0, -13, 0)`.
+   selected locked orientation for the chosen insertion mode.
 3. Start the recorder UI:
 
    ```bash
@@ -80,19 +84,28 @@ Use two terminals on the robot computer.
    python3 direct_down_insertion.py --robot-name SHER20
    ```
 
+   Perpendicular-to-eye:
+
+   ```bash
+   python3 perpendicular_insertion.py --robot-name SHER20
+   ```
+
    30-degree-from-horizontal entry:
 
    ```bash
    python3 insertion_30deg.py --robot-name SHER20
    ```
 
-5. For either script, confirm that the tool has clearance to rotate. The
-   30-degree script rotates 60 degrees away from straight/direct-down. Both
+5. For any insertion script, confirm that the tool has clearance to rotate.
+   The perpendicular script rotates to the absolute `(0, +20, 0)` RPY target.
+   The 30-degree script rotates 60 degrees away from straight/direct-down. All
    scripts wait until the locked orientation settles. After orientation setup,
    the script automatically moves the tip to its pre-teleop start target within
    `0.5 mm` tolerance, unless launched with `--skip-centering`.
 
    - Direct down uses the workspace midpoint `(-16.0, -109.0, 8.5)` mm.
+   - Perpendicular-to-eye uses the workspace midpoint `(-16.0, -109.0, 8.5)`
+     mm.
    - 30-degree oblique uses `(-5.5, -109.0, 17.0)` mm. This is intentionally
      closer to the observed upper/right fixed-orientation limit so the tool has
      more usable shaft-direction insertion travel before the lower/left
@@ -110,15 +123,15 @@ Use two terminals on the robot computer.
 
    `W/S` and `A/D` are lateral robot-base motions. In the direct-down script,
    `C/V` are pure robot-base Z down/up, even though the locked straight
-   orientation is `(0, -13, 0)`. In the 30-degree script, `C/V` follow the
-   locked oblique insertion axis computed from the tool orientation. Translation
-   stops as soon as the movement key is released and also stops if the control
-   window loses focus. No key changes the tool orientation.
+   orientation is `(0, -13, 0)`. In the perpendicular and 30-degree scripts,
+   `C/V` follow the locked insertion axis computed from the tool orientation.
+   Translation stops as soon as the movement key is released and also stops if
+   the control window loses focus. No key changes the tool orientation.
 
    The motion window reports `Command gate`. This code has no force/contact
    stop. It can suppress translation if orientation error exceeds 2 degrees, a
    relative travel limit is reached, or the command would push farther outside
-   the configured workspace. For oblique insertion, it also suppresses the
+   the configured workspace. For tool-axis insertion, it also suppresses the
    Z-down component if commanded horizontal progress stalls while `C` is held;
    the gate reports `horizontal stall guard` and clears when `C` is released.
    SHER's lower-level force-control/contact behavior is outside this script and
@@ -128,8 +141,8 @@ Use two terminals on the robot computer.
 7. In the recorder, optionally press **Tare** or `T`. A manual tare is retained
    for that trial. If you do not tare, Start automatically uses the most recent
    one second of force data as the baseline. Press **Start Collection** or `S`.
-   The recorder UI shows the active condition at the top: `DIRECT DOWN (0 deg)`
-   or `30 DEG OBLIQUE`.
+   The recorder UI shows the active condition at the top: `DIRECT DOWN
+   (0 deg)`, `PERPENDICULAR (20 deg)`, or `30 DEG OBLIQUE`.
    The force chart keeps a fixed recent-time width from `--plot-seconds` while
    automatically rescaling its vertical force range to the visible raw and EMA
    traces. Tune the vertical padding with `--plot-y-padding-fraction` and the
@@ -146,7 +159,7 @@ Always keep a hand on the physical emergency stop. Test with no phantom first.
   script is suppressing the requested translation.
 - If `Command gate` reports a workspace limit, the current key command would
   move the tip past the configured workspace boundary.
-- If `Command gate` reports `horizontal stall guard`, the oblique insertion
+- If `Command gate` reports `horizontal stall guard`, the tool-axis insertion
   command needs horizontal motion, but the measured horizontal pose progress is
   too small. The script blocks Z-down motion to prevent tool bending. Release
   `C`, retract or reposition, and do not keep pushing into the obstruction.
@@ -172,15 +185,16 @@ The conservative defaults are:
 - Workspace bounds: `x = -42..10 mm`, `y = -133..-85 mm`,
   `z = -13..30 mm`
 - Direct-down pre-teleop target: `(-16.0, -109.0, 8.5) mm`
+- Perpendicular pre-teleop target: `(-16.0, -109.0, 8.5) mm`
 - 30-degree pre-teleop target: `(-5.5, -109.0, 17.0) mm`
 - Workspace and centering tolerance: `0.5 mm`
 - Maximum insertion from teleoperation start: `20.0 mm`
 - Maximum retraction from teleoperation start: `20.0 mm`
 - Direct-down C/V axis: robot-base Z
-- Oblique C/V axis: locked tool insertion axis
+- Perpendicular and oblique C/V axis: locked tool insertion axis
 - Maximum total displacement from teleoperation start: `25.0 mm`
 - Pose-staleness stop: `0.5 s`
-- Oblique horizontal-stall guard: enabled for tool axes with horizontal
+- Tool-axis horizontal-stall guard: enabled for tool axes with horizontal
   component at least `0.35`; measured over `0.6 s`
 
 Example overrides:

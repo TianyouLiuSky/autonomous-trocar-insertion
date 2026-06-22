@@ -124,6 +124,17 @@ class ForceCollectionCommonTests(unittest.TestCase):
             60.0,
         )
 
+    def test_perpendicular_orientation_uses_absolute_twenty_degree_pitch(self):
+        perpendicular = locked_target_rotation(
+            straight_rpy_deg=[0.0, 0.0, 0.0],
+            entry_angle_deg=20.0,
+        )
+        np.testing.assert_allclose(
+            perpendicular.as_euler("xyz", degrees=True),
+            [0.0, 20.0, 0.0],
+            atol=1e-10,
+        )
+
     def test_ema_update_preserves_missing_channel(self):
         previous = np.array([1.0, 2.0, np.nan, np.nan])
         current = np.array([3.0, np.nan, 4.0, np.nan])
@@ -216,6 +227,17 @@ class ForceCollectionCommonTests(unittest.TestCase):
             np.array([-0.731, 0.0, -0.682]) / np.linalg.norm([-0.731, 0.0, -0.682]),
         )
 
+    def test_commanded_insertion_axis_can_force_tool_axis(self):
+        result = commanded_insertion_axis(
+            tool_axis=[0.342, 0.0, -0.940],
+            entry_angle_deg=0.0,
+            mode="tool-axis",
+        )
+        np.testing.assert_allclose(
+            result,
+            np.array([0.342, 0.0, -0.940]) / np.linalg.norm([0.342, 0.0, -0.940]),
+        )
+
     def test_workspace_center_uses_midpoint(self):
         result = workspace_center(
             [-42.0, -133.0, -13.0],
@@ -265,6 +287,10 @@ class ForceCollectionCommonTests(unittest.TestCase):
 
     def test_insertion_condition_label(self):
         self.assertEqual(insertion_condition_label(0.0), "DIRECT DOWN (0 deg)")
+        self.assertEqual(
+            insertion_condition_label(20.0),
+            "PERPENDICULAR (20 deg)",
+        )
         self.assertEqual(insertion_condition_label(30.0), "30 DEG OBLIQUE")
         self.assertEqual(
             insertion_condition_label(float("nan")),

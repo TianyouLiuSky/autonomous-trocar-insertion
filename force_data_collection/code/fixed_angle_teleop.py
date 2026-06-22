@@ -3,7 +3,8 @@
 Fixed-angle keyboard teleoperation for force insertion experiments.
 
 The direct-down reference is an absolute robot orientation. A non-zero entry
-angle is applied relative to that reference, then the target remains locked.
+angle is applied relative to that reference unless an absolute target RPY is
+provided, then the target remains locked.
 """
 
 import argparse
@@ -33,7 +34,7 @@ Fixed-angle force insertion teleoperation
 
   Hold W / S : robot-base X+ / X-
   Hold A / D : robot-base Y+ / Y-
-  Hold C / V : direct-down base Z, oblique locked-axis insertion/retraction
+  Hold C / V : direct-down base Z, otherwise locked-axis insertion/retraction
   Space      : stop and hold the current position
   H          : print this help
   Q          : stop and quit
@@ -48,7 +49,15 @@ def parse_args(
     default_angle_deg=None,
     default_label_angle_deg=None,
     default_center_position_mm=None,
+    default_straight_rpy_deg=None,
+    default_target_rpy_deg=None,
+    default_insertion_axis_mode="auto",
 ):
+    straight_rpy_default = (
+        (0.0, -13.0, 0.0)
+        if default_straight_rpy_deg is None
+        else default_straight_rpy_deg
+    )
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--robot-name", default="SHER20")
     parser.add_argument(
@@ -71,8 +80,19 @@ def parse_args(
         type=float,
         nargs=3,
         metavar=("ROLL", "PITCH", "YAW"),
-        default=(0.0, -13.0, 0.0),
+        default=straight_rpy_default,
         help="Absolute straight orientation in XYZ Euler degrees.",
+    )
+    parser.add_argument(
+        "--target-rpy-deg",
+        type=float,
+        nargs=3,
+        metavar=("ROLL", "PITCH", "YAW"),
+        default=default_target_rpy_deg,
+        help=(
+            "Optional absolute target orientation in XYZ Euler degrees. "
+            "When set, this overrides --straight-rpy-deg plus --entry-angle-deg."
+        ),
     )
     parser.add_argument(
         "--tilt-axis",
@@ -200,7 +220,7 @@ def parse_args(
         "--horizontal-stall-min-progress-mm-s",
         type=float,
         default=0.02,
-        help="Minimum acceptable horizontal progress speed during oblique insertion.",
+        help="Minimum acceptable horizontal progress speed during tool-axis insertion.",
     )
     parser.add_argument(
         "--horizontal-stall-progress-ratio",
@@ -218,6 +238,15 @@ def parse_args(
         help=(
             "Use pure robot-base Z for C/V when --entry-angle-deg is within "
             "this tolerance of direct-down."
+        ),
+    )
+    parser.add_argument(
+        "--insertion-axis-mode",
+        choices=("auto", "base-z", "tool-axis"),
+        default=default_insertion_axis_mode,
+        help=(
+            "How C/V insertion direction is selected. auto keeps direct-down "
+            "on robot-base Z and nonzero angles on the locked tool axis."
         ),
     )
     parser.add_argument(
@@ -349,12 +378,17 @@ class FixedAngleTeleop:
         )
 
     def configure_locked_orientation(self):
-        self.target_rotation = locked_target_rotation(
-            straight_rpy_deg=self.args.straight_rpy_deg,
-            entry_angle_deg=self.args.entry_angle_deg,
-            tilt_axis=self.args.tilt_axis,
-            tilt_sign=self.args.tilt_sign,
-        )
+        if self.args.target_rpy_deg is None:
+            self.target_rotation = locked_target_rotation(
+                straight_rpy_deg=self.args.straight_rpy_deg,
+                entry_angle_deg=self.args.entry_angle_deg,
+                tilt_axis=self.args.tilt_axis,
+                tilt_sign=self.args.tilt_sign,
+            )
+        else:
+            self.target_rotation = R.from_euler(
+                "xyz", self.args.target_rpy_deg, degrees=True
+            )
         matrix = self.target_rotation.as_matrix()
         self.local_x = matrix[:, 0]
         self.local_y = matrix[:, 1]
@@ -363,6 +397,7 @@ class FixedAngleTeleop:
             self.tool_insertion_axis,
             self.args.entry_angle_deg,
             self.args.direct_down_base_z_threshold_deg,
+            self.args.insertion_axis_mode,
         )
         self.target_rpy_deg = self.target_rotation.as_euler(
             "xyz", degrees=True
@@ -371,10 +406,11 @@ class FixedAngleTeleop:
         self.angle_pub.publish(float(self.args.label_angle_deg))
         self.insertion_axis_pub.publish(*[float(v) for v in self.insertion_axis])
         self.mode_pub.publish(
-            "label_{}deg_tilt_{}deg_{}_target_rpy_{:+.3f}_{:+.3f}_{:+.3f}".format(
+            "label_{}deg_tilt_{}deg_{}_axis_{}_target_rpy_{:+.3f}_{:+.3f}_{:+.3f}".format(
                 self.args.label_angle_deg,
                 self.args.entry_angle_deg,
                 self.args.tilt_axis,
+                self.args.insertion_axis_mode,
                 *self.target_rpy_deg,
             )
         )
@@ -397,15 +433,27 @@ class FixedAngleTeleop:
             return
 
         if not self.args.yes:
+            if self.args.target_rpy_deg is None:
+                target_detail = (
+                    "Tilt from straight is {:.1f} degrees about {}.\n".format(
+                        self.args.entry_angle_deg,
+                        self.args.tilt_axis,
+                    )
+                )
+            else:
+                target_detail = (
+                    "Absolute target RPY override is active for this mode.\n"
+                )
             response = input(
                 "\nThe robot will rotate in place to target RPY {} deg.\n"
-                "Tilt from straight is {:.1f} degrees about {}.\n"
+                "{}"
                 "Experimental label is {:.1f} degrees.\n"
+                "C/V insertion-axis mode is {}.\n"
                 "Confirm clearance, keep hand on e-stop, then type YES: ".format(
                     np.round(self.target_rpy_deg, 3),
-                    self.args.entry_angle_deg,
-                    self.args.tilt_axis,
+                    target_detail,
                     self.args.label_angle_deg,
+                    self.args.insertion_axis_mode,
                 )
             ).strip()
             if response != "YES":
@@ -856,8 +904,8 @@ class TeleopWindow(QtWidgets.QWidget):
             "Space: stop    Q: quit\n\n"
             "Click this window before controlling the robot.\n"
             "Releasing a key or changing window focus stops translation.\n"
-            "Direct-down C/V uses base Z. Oblique C/V follows the locked axis.\n"
-            "For oblique insertion, stalled horizontal progress blocks Z-down motion."
+            "Direct-down C/V uses base Z. Other fixed modes follow the locked axis.\n"
+            "For tool-axis insertion, stalled horizontal progress blocks Z-down motion."
         )
         instructions.setAlignment(QtCore.Qt.AlignCenter)
         instructions.setStyleSheet("font-size: 15px;")
@@ -979,11 +1027,17 @@ def run(
     default_angle_deg=None,
     default_label_angle_deg=None,
     default_center_position_mm=None,
+    default_straight_rpy_deg=None,
+    default_target_rpy_deg=None,
+    default_insertion_axis_mode="auto",
 ):
     args = parse_args(
         default_angle_deg=default_angle_deg,
         default_label_angle_deg=default_label_angle_deg,
         default_center_position_mm=default_center_position_mm,
+        default_straight_rpy_deg=default_straight_rpy_deg,
+        default_target_rpy_deg=default_target_rpy_deg,
+        default_insertion_axis_mode=default_insertion_axis_mode,
     )
     if args.max_linear_vel > 0.5 or args.max_angular_vel > 0.1:
         print("WARNING: configured velocity exceeds the conservative test range.")
@@ -1010,6 +1064,12 @@ def run(
                 np.asarray(args.straight_rpy_deg, dtype=float)
             )
         )
+        if args.target_rpy_deg is not None:
+            print(
+                "Absolute target RPY override: {} deg".format(
+                    np.asarray(args.target_rpy_deg, dtype=float)
+                )
+            )
         teleop.configure_locked_orientation()
         print(
             "Locked target RPY: {} deg".format(
@@ -1026,6 +1086,7 @@ def run(
                 np.round(teleop.insertion_axis, 4)
             )
         )
+        print("C/V insertion-axis mode: {}".format(args.insertion_axis_mode))
         center_target, active_axes = teleop.workspace_center_target()
         print(
             "Workspace bounds: min={} mm max={} mm tol={:.3f} mm".format(

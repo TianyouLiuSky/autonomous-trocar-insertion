@@ -195,7 +195,7 @@ def parse_args(
             "horizontal pose progress stalls."
         ),
     )
-    parser.add_argument(
+    parser.add_argument(    
         "--horizontal-stall-window-s",
         type=float,
         default=0.6,

@@ -30,8 +30,8 @@ from needle_tip_rcm_sequence import (
     prompt,
     stop_robot,
     validate_args,
-    workspace_enabled,
-    workspace_summary,
+    ee_workspace_enabled,
+    ee_workspace_summary,
 )
 
 
@@ -54,7 +54,7 @@ def parse_args():
         nargs=3,
         metavar=("X", "Y", "Z"),
         default=None,
-        help="Manual end-effector-to-physical-tip offset in gripper coordinates.",
+        help="Manual FrameEE-to-physical-tip offset in FrameEE coordinates.",
     )
     parser.add_argument(
         "--target-rpy-deg",
@@ -90,7 +90,7 @@ def parse_args():
         "--stop-on-handle-drift-mm",
         type=float,
         default=20.0,
-        help="Stop if the FrameEE/gripper origin drifts this far during one stage.",
+        help="Stop if the FrameEE origin drifts this far during one stage.",
     )
     parser.add_argument(
         "--workspace-min-mm",
@@ -98,7 +98,7 @@ def parse_args():
         nargs=3,
         metavar=("X", "Y", "Z"),
         default=DEFAULT_WORKSPACE_MIN_MM,
-        help="Minimum allowed FrameEE/gripper position in robot-base millimeters.",
+        help="Minimum allowed FrameEE position in robot-base millimeters.",
     )
     parser.add_argument(
         "--workspace-max-mm",
@@ -106,7 +106,7 @@ def parse_args():
         nargs=3,
         metavar=("X", "Y", "Z"),
         default=DEFAULT_WORKSPACE_MAX_MM,
-        help="Maximum allowed FrameEE/gripper position in robot-base millimeters.",
+        help="Maximum allowed FrameEE position in robot-base millimeters.",
     )
     parser.add_argument("--workspace-tol-mm", type=float, default=0.5)
     parser.add_argument("--disable-workspace-check", action="store_true")
@@ -156,15 +156,16 @@ def main():
 
     print("\nManual tip-offset validation sweep")
     print("  robot: {}".format(args.robot_name))
-    print("  initial gripper pose: {}".format(np.round(initial_pose, 4)))
+    print("  initial FrameEE pose: {}".format(np.round(initial_pose, 4)))
     print("  computed fixed tip: {}".format(np.round(fixed_tip, 4)))
     print("  tip offset source: {}".format(tip_offset_source))
-    print("  tip offset gripper mm: {}".format(np.round(tip_offset, 4)))
+    print("  tip offset FrameEE->tool-tip mm: {}".format(np.round(tip_offset, 4)))
     print("  sweep: +/- {:.3f} deg about {}".format(args.sweep_deg, args.sweep_axis))
     print("  max linear vel: {:.4f} mm/s".format(args.max_linear_vel))
     print("  max angular vel: {:.4f} rad/s".format(args.max_angular_vel))
-    if workspace_enabled(args):
-        print("  FrameEE workspace: {}".format(workspace_summary(args)))
+    if ee_workspace_enabled(args):
+        print("  FrameEE-only workspace: {}".format(ee_workspace_summary(args)))
+        print("  workspace is enforced on robot end effector, not physical tool tip")
         print("  robot axes: +X in/forward, +Y left, +Z up")
     else:
         print("  FrameEE workspace check: disabled")

@@ -67,7 +67,7 @@ def parse_args():
         nargs=3,
         metavar=("X", "Y", "Z"),
         default=None,
-        help="Manual end-effector-to-physical-tip offset in gripper coordinates.",
+        help="Manual FrameEE-to-physical-tip offset in FrameEE coordinates.",
     )
     parser.add_argument(
         "--perpendicular-rpy-deg",
@@ -215,15 +215,15 @@ def clip_norm(vector, max_norm):
 
 
 def fit_angular_to_linear_limit(tip_velocity, angular_velocity, tip_world, max_linear):
-    """Scale angular velocity so compensated gripper velocity fits max_linear."""
+    """Scale angular velocity so compensated FrameEE velocity fits max_linear."""
     tip_velocity = np.asarray(tip_velocity, dtype=float)
     angular_velocity = np.asarray(angular_velocity, dtype=float)
     tip_world = np.asarray(tip_world, dtype=float)
 
-    def gripper_velocity(scale):
+    def ee_velocity(scale):
         return tip_velocity - np.cross(scale * angular_velocity, tip_world)
 
-    if np.linalg.norm(gripper_velocity(1.0)) <= max_linear:
+    if np.linalg.norm(ee_velocity(1.0)) <= max_linear:
         return angular_velocity
     if np.linalg.norm(tip_velocity) >= max_linear:
         return np.zeros_like(angular_velocity)
@@ -231,7 +231,7 @@ def fit_angular_to_linear_limit(tip_velocity, angular_velocity, tip_world, max_l
     lo, hi = 0.0, 1.0
     for _ in range(40):
         mid = 0.5 * (lo + hi)
-        if np.linalg.norm(gripper_velocity(mid)) <= max_linear:
+        if np.linalg.norm(ee_velocity(mid)) <= max_linear:
             lo = mid
         else:
             hi = mid
@@ -250,12 +250,12 @@ def current_rotation(robot):
     return R.from_quat(current_quat(robot))
 
 
-def physical_tip_position(gripper_pos, rotation, tip_offset_gripper):
-    return gripper_pos + rotation.apply(tip_offset_gripper)
+def physical_tip_position(ee_pos, rotation, tip_offset_ee):
+    return np.asarray(ee_pos, dtype=float) + rotation.apply(tip_offset_ee)
 
 
-def gripper_position_for_tip(tip_pos, rotation, tip_offset_gripper):
-    return np.asarray(tip_pos, dtype=float) - rotation.apply(tip_offset_gripper)
+def ee_position_for_tip(tip_pos, rotation, tip_offset_ee):
+    return np.asarray(tip_pos, dtype=float) - rotation.apply(tip_offset_ee)
 
 
 def needle_axis(rotation):
@@ -263,40 +263,40 @@ def needle_axis(rotation):
     return -rotation.as_matrix()[:, 2]
 
 
-def workspace_enabled(args):
+def ee_workspace_enabled(args):
     return not getattr(args, "disable_workspace_check", False)
 
 
-def workspace_bounds(args):
+def ee_workspace_bounds(args):
     return (
         np.asarray(args.workspace_min_mm, dtype=float),
         np.asarray(args.workspace_max_mm, dtype=float),
     )
 
 
-def workspace_violations(position, args):
+def ee_workspace_violations(ee_pos_mm, args):
     """Check robot end-effector / FrameEE bounds, never physical tool-tip bounds."""
-    if not workspace_enabled(args):
+    if not ee_workspace_enabled(args):
         return []
-    position = np.asarray(position, dtype=float)
-    lower, upper = workspace_bounds(args)
+    ee_pos_mm = np.asarray(ee_pos_mm, dtype=float)
+    lower, upper = ee_workspace_bounds(args)
     tol = float(args.workspace_tol_mm)
     labels = ("X", "Y", "Z")
     violations = []
     for index, label in enumerate(labels):
-        if position[index] < lower[index] - tol:
+        if ee_pos_mm[index] < lower[index] - tol:
             violations.append(
-                "{} {:.3f} < min {:.3f}".format(label, position[index], lower[index])
+                "{} {:.3f} < min {:.3f}".format(label, ee_pos_mm[index], lower[index])
             )
-        if position[index] > upper[index] + tol:
+        if ee_pos_mm[index] > upper[index] + tol:
             violations.append(
-                "{} {:.3f} > max {:.3f}".format(label, position[index], upper[index])
+                "{} {:.3f} > max {:.3f}".format(label, ee_pos_mm[index], upper[index])
             )
     return violations
 
 
-def workspace_summary(args):
-    lower, upper = workspace_bounds(args)
+def ee_workspace_summary(args):
+    lower, upper = ee_workspace_bounds(args)
     return "min {} max {} tol {:.3f} mm".format(
         np.round(lower, 4),
         np.round(upper, 4),
@@ -326,17 +326,17 @@ def move_tip_pose(
     label,
     target_tip_pos,
     target_rotation,
-    tip_offset_gripper,
+    tip_offset_ee,
     args,
     sample_rows,
 ):
     start_pose = current_pose(robot)
-    start_gripper = start_pose[:3].copy()
-    start_tip = physical_tip_position(start_gripper, current_rotation(robot), tip_offset_gripper)
-    target_gripper = gripper_position_for_tip(
+    start_ee = start_pose[:3].copy()
+    start_tip = physical_tip_position(start_ee, current_rotation(robot), tip_offset_ee)
+    target_ee = ee_position_for_tip(
         target_tip_pos,
         target_rotation,
-        tip_offset_gripper,
+        tip_offset_ee,
     )
     start_time = time.time()
     deadline = start_time + args.timeout_s
@@ -345,20 +345,21 @@ def move_tip_pose(
     status = "timeout"
     final_tip_error = float("nan")
     final_angle_error = float("nan")
-    final_gripper_drift = float("nan")
+    final_ee_drift = float("nan")
     final_pose = start_pose.copy()
 
     print("\nStage: {}".format(label))
+    print("  start FrameEE: {}".format(np.round(start_ee, 4)))
     print("  start tip:  {}".format(np.round(start_tip, 4)))
     print("  target tip: {}".format(np.round(target_tip_pos, 4)))
-    print("  target FrameEE: {}".format(np.round(target_gripper, 4)))
+    print("  target FrameEE: {}".format(np.round(target_ee, 4)))
     print(
         "  target rpy: {}".format(
             np.round(target_rotation.as_euler("xyz", degrees=True), 4)
         )
     )
 
-    target_violations = workspace_violations(target_gripper, args)
+    target_violations = ee_workspace_violations(target_ee, args)
     if target_violations:
         status = "workspace_target"
         final_pose = start_pose.copy()
@@ -371,14 +372,15 @@ def move_tip_pose(
             "target_tip_x_mm": round(float(target_tip_pos[0]), 6),
             "target_tip_y_mm": round(float(target_tip_pos[1]), 6),
             "target_tip_z_mm": round(float(target_tip_pos[2]), 6),
-            "target_gripper_x_mm": round(float(target_gripper[0]), 6),
-            "target_gripper_y_mm": round(float(target_gripper[1]), 6),
-            "target_gripper_z_mm": round(float(target_gripper[2]), 6),
-            "final_gripper_x_mm": round(float(final_pose[0]), 6),
-            "final_gripper_y_mm": round(float(final_pose[1]), 6),
-            "final_gripper_z_mm": round(float(final_pose[2]), 6),
+            "target_ee_x_mm": round(float(target_ee[0]), 6),
+            "target_ee_y_mm": round(float(target_ee[1]), 6),
+            "target_ee_z_mm": round(float(target_ee[2]), 6),
+            "final_ee_x_mm": round(float(final_pose[0]), 6),
+            "final_ee_y_mm": round(float(final_pose[1]), 6),
+            "final_ee_z_mm": round(float(final_pose[2]), 6),
             "final_tip_error_mm": round(float(np.linalg.norm(target_tip_pos - start_tip)), 6),
             "final_orientation_error_deg": float("nan"),
+            "final_ee_drift_mm": 0.0,
             "final_handle_drift_mm": 0.0,
             "workspace_violation": "; ".join(target_violations),
         }
@@ -387,10 +389,10 @@ def move_tip_pose(
         while not rospy.is_shutdown():
             now = time.time()
             final_pose = current_pose(robot)
-            gripper_pos = final_pose[:3]
+            ee_pos = final_pose[:3]
             rotation = current_rotation(robot)
-            tip_world = rotation.apply(tip_offset_gripper)
-            tip_pos = gripper_pos + tip_world
+            tip_world = rotation.apply(tip_offset_ee)
+            tip_pos = ee_pos + tip_world
 
             tip_error_vec = target_tip_pos - tip_pos
             tip_error = float(np.linalg.norm(tip_error_vec))
@@ -398,25 +400,25 @@ def move_tip_pose(
             rot_error = target_rotation * rotation.inv()
             rotvec = rot_error.as_rotvec()
             angle_error = float(np.linalg.norm(rotvec) * 180.0 / np.pi)
-            gripper_drift = float(np.linalg.norm(gripper_pos - start_gripper))
+            ee_drift = float(np.linalg.norm(ee_pos - start_ee))
 
             final_tip_error = tip_error
             final_angle_error = angle_error
-            final_gripper_drift = gripper_drift
-            current_violations = workspace_violations(gripper_pos, args)
+            final_ee_drift = ee_drift
+            current_violations = ee_workspace_violations(ee_pos, args)
             sample_rows.append({
                 "unix_time": round(now, 6),
                 "elapsed_sec": round(now - start_time, 6),
                 "stage": label,
                 "tip_error_mm": round(tip_error, 6),
                 "orientation_error_deg": round(angle_error, 6),
-                "gripper_drift_mm": round(gripper_drift, 6),
+                "ee_drift_mm": round(ee_drift, 6),
                 "tip_x_mm": round(float(tip_pos[0]), 6),
                 "tip_y_mm": round(float(tip_pos[1]), 6),
                 "tip_z_mm": round(float(tip_pos[2]), 6),
-                "gripper_x_mm": round(float(gripper_pos[0]), 6),
-                "gripper_y_mm": round(float(gripper_pos[1]), 6),
-                "gripper_z_mm": round(float(gripper_pos[2]), 6),
+                "ee_x_mm": round(float(ee_pos[0]), 6),
+                "ee_y_mm": round(float(ee_pos[1]), 6),
+                "ee_z_mm": round(float(ee_pos[2]), 6),
                 "workspace_violation": "; ".join(current_violations),
             })
 
@@ -435,7 +437,7 @@ def move_tip_pose(
             if now >= deadline:
                 status = "timeout"
                 break
-            if args.stop_on_handle_drift_mm > 0.0 and gripper_drift > args.stop_on_handle_drift_mm:
+            if args.stop_on_handle_drift_mm > 0.0 and ee_drift > args.stop_on_handle_drift_mm:
                 status = "handle_drift"
                 break
 
@@ -455,16 +457,16 @@ def move_tip_pose(
             )
 
             # Keep the physical tool tip, not the handle, on the planned path.
-            gripper_linear_vel = desired_tip_vel - np.cross(angular_vel, tip_world)
-            next_gripper = gripper_pos + gripper_linear_vel / args.rate_hz
-            if workspace_violations(next_gripper, args):
+            ee_linear_vel = desired_tip_vel - np.cross(angular_vel, tip_world)
+            next_ee = ee_pos + ee_linear_vel / args.rate_hz
+            if ee_workspace_violations(next_ee, args):
                 status = "workspace_limit"
                 break
 
             robot.pub_linear.publish(
-                float(gripper_linear_vel[0]),
-                float(gripper_linear_vel[1]),
-                float(gripper_linear_vel[2]),
+                float(ee_linear_vel[0]),
+                float(ee_linear_vel[1]),
+                float(ee_linear_vel[2]),
             )
             robot.pub_angular.publish(
                 float(angular_vel[0]),
@@ -481,7 +483,7 @@ def move_tip_pose(
             status,
             final_tip_error,
             final_angle_error,
-            final_gripper_drift,
+            final_ee_drift,
         )
     )
 
@@ -493,15 +495,16 @@ def move_tip_pose(
         "target_tip_x_mm": round(float(target_tip_pos[0]), 6),
         "target_tip_y_mm": round(float(target_tip_pos[1]), 6),
         "target_tip_z_mm": round(float(target_tip_pos[2]), 6),
-        "target_gripper_x_mm": round(float(target_gripper[0]), 6),
-        "target_gripper_y_mm": round(float(target_gripper[1]), 6),
-        "target_gripper_z_mm": round(float(target_gripper[2]), 6),
-        "final_gripper_x_mm": round(float(final_pose[0]), 6),
-        "final_gripper_y_mm": round(float(final_pose[1]), 6),
-        "final_gripper_z_mm": round(float(final_pose[2]), 6),
+        "target_ee_x_mm": round(float(target_ee[0]), 6),
+        "target_ee_y_mm": round(float(target_ee[1]), 6),
+        "target_ee_z_mm": round(float(target_ee[2]), 6),
+        "final_ee_x_mm": round(float(final_pose[0]), 6),
+        "final_ee_y_mm": round(float(final_pose[1]), 6),
+        "final_ee_z_mm": round(float(final_pose[2]), 6),
         "final_tip_error_mm": round(float(final_tip_error), 6),
         "final_orientation_error_deg": round(float(final_angle_error), 6),
-        "final_handle_drift_mm": round(float(final_gripper_drift), 6),
+        "final_ee_drift_mm": round(float(final_ee_drift), 6),
+        "final_handle_drift_mm": round(float(final_ee_drift), 6),
         "workspace_violation": "",
     }
 
@@ -538,7 +541,7 @@ def validate_args(args):
         raise ValueError("--orientation-tol-deg must be positive")
     if args.workspace_tol_mm < 0.0:
         raise ValueError("--workspace-tol-mm must be non-negative")
-    lower, upper = workspace_bounds(args)
+    lower, upper = ee_workspace_bounds(args)
     if lower.shape != (3,) or upper.shape != (3,):
         raise ValueError("workspace bounds must contain exactly 3 values")
     if np.any(lower >= upper):
@@ -583,7 +586,7 @@ def main():
     initial_pose = current_pose(robot)
     initial_rotation = current_rotation(robot)
     initial_tip = physical_tip_position(initial_pose[:3], initial_rotation, tip_offset)
-    initial_violations = workspace_violations(initial_pose[:3], args)
+    initial_violations = ee_workspace_violations(initial_pose[:3], args)
     if initial_violations:
         raise RuntimeError(
             "Initial robot end-effector / FrameEE pose is outside workspace: {}".format(
@@ -593,10 +596,10 @@ def main():
 
     print("\nTip-centered RCM needle sequence")
     print("  robot: {}".format(args.robot_name))
-    print("  initial gripper pose: {}".format(np.round(initial_pose, 4)))
+    print("  initial FrameEE pose: {}".format(np.round(initial_pose, 4)))
     print("  initial physical tip: {}".format(np.round(initial_tip, 4)))
     print("  tip offset source: {}".format(tip_offset_source))
-    print("  tip offset gripper mm: {}".format(np.round(tip_offset, 4)))
+    print("  tip offset FrameEE->tool-tip mm: {}".format(np.round(tip_offset, 4)))
     print("  perpendicular RPY deg: {}".format(np.round(args.perpendicular_rpy_deg, 4)))
     print("  straight/down RPY deg: {}".format(np.round(args.straight_rpy_deg, 4)))
     print("  oblique source: {}".format(oblique_source))
@@ -610,8 +613,8 @@ def main():
     ))
     print("  max linear vel: {:.4f} mm/s".format(args.max_linear_vel))
     print("  max angular vel: {:.4f} rad/s".format(args.max_angular_vel))
-    if workspace_enabled(args):
-        print("  FrameEE-only workspace: {}".format(workspace_summary(args)))
+    if ee_workspace_enabled(args):
+        print("  FrameEE-only workspace: {}".format(ee_workspace_summary(args)))
         print("  workspace is enforced on robot end effector, not physical tool tip")
         print("  robot axes: +X in/forward, +Y left, +Z up")
     else:

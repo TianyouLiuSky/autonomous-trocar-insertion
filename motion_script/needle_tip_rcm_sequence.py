@@ -3,7 +3,8 @@
 Tip-centered RCM needle sequence for SHER.
 
 Sequence:
-1. Rotate to the perpendicular approach pose, default RPY (0, 20, 0).
+0. Move the robot-reported FrameEE to a safe start pose, default workspace center.
+1. Rotate/settle to the perpendicular approach pose, default RPY (0, 20, 0).
 2. Move the physical tool tip along the needle direction for 0.25 mm.
 3. Rotate to the 30-degree oblique force-collection condition, about the tool tip.
 4. Move the physical tool tip along the oblique needle direction for 0.5 mm.
@@ -124,6 +125,33 @@ def parse_args():
     parser.add_argument("--first-step-mm", type=float, default=0.25)
     parser.add_argument("--second-step-mm", type=float, default=0.5)
     parser.add_argument("--final-step-mm", type=float, default=10.0)
+    parser.add_argument(
+        "--start-ee-mm",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help=(
+            "Safe robot end-effector / FrameEE start position. Defaults to the "
+            "workspace midpoint."
+        ),
+    )
+    parser.add_argument(
+        "--start-rpy-deg",
+        type=float,
+        nargs=3,
+        metavar=("ROLL", "PITCH", "YAW"),
+        default=None,
+        help=(
+            "Orientation for the safe start move. Defaults to the perpendicular "
+            "RPY target."
+        ),
+    )
+    parser.add_argument(
+        "--skip-start-ee-move",
+        action="store_true",
+        help="Skip the initial non-tip-centered move to the safe FrameEE start pose.",
+    )
     parser.add_argument("--rate-hz", type=float, default=100.0)
     parser.add_argument("--position-gain", type=float, default=1.0)
     parser.add_argument("--orientation-gain", type=float, default=0.8)
@@ -304,6 +332,11 @@ def ee_workspace_summary(args):
     )
 
 
+def ee_workspace_midpoint(args):
+    lower, upper = ee_workspace_bounds(args)
+    return 0.5 * (lower + upper)
+
+
 def stop_robot(robot):
     robot.pub_linear.publish(0.0, 0.0, 0.0)
     robot.pub_angular.publish(0.0, 0.0, 0.0)
@@ -319,6 +352,180 @@ def prompt(args, message):
     ).strip()
     if response.lower() == "q":
         raise KeyboardInterrupt
+
+
+def move_ee_pose(
+    robot,
+    label,
+    target_ee_pos,
+    target_rotation,
+    tip_offset_ee,
+    args,
+    sample_rows,
+):
+    target_ee_pos = np.asarray(target_ee_pos, dtype=float)
+    start_pose = current_pose(robot)
+    start_ee = start_pose[:3].copy()
+    start_time = time.time()
+    deadline = start_time + args.timeout_s
+    rate = rospy.Rate(args.rate_hz)
+    settled_since = None
+    status = "timeout"
+    final_ee_error = float("nan")
+    final_angle_error = float("nan")
+    final_ee_drift = float("nan")
+    final_tip = physical_tip_position(start_ee, current_rotation(robot), tip_offset_ee)
+    final_pose = start_pose.copy()
+
+    print("\nStage: {}".format(label))
+    print("  start FrameEE:  {}".format(np.round(start_ee, 4)))
+    print("  target FrameEE: {}".format(np.round(target_ee_pos, 4)))
+    print(
+        "  target rpy: {}".format(
+            np.round(target_rotation.as_euler("xyz", degrees=True), 4)
+        )
+    )
+    print("  note: setup move does not hold the physical tip fixed")
+
+    target_violations = ee_workspace_violations(target_ee_pos, args)
+    if target_violations:
+        print("  FrameEE workspace target violation: {}".format("; ".join(target_violations)))
+        return {
+            "stage": label,
+            "status": "workspace_target",
+            "reached": False,
+            "elapsed_sec": 0.0,
+            "target_tip_x_mm": float("nan"),
+            "target_tip_y_mm": float("nan"),
+            "target_tip_z_mm": float("nan"),
+            "target_ee_x_mm": round(float(target_ee_pos[0]), 6),
+            "target_ee_y_mm": round(float(target_ee_pos[1]), 6),
+            "target_ee_z_mm": round(float(target_ee_pos[2]), 6),
+            "final_ee_x_mm": round(float(start_ee[0]), 6),
+            "final_ee_y_mm": round(float(start_ee[1]), 6),
+            "final_ee_z_mm": round(float(start_ee[2]), 6),
+            "final_tip_error_mm": float("nan"),
+            "final_ee_error_mm": round(float(np.linalg.norm(target_ee_pos - start_ee)), 6),
+            "final_orientation_error_deg": float("nan"),
+            "final_ee_drift_mm": 0.0,
+            "final_handle_drift_mm": 0.0,
+            "workspace_violation": "; ".join(target_violations),
+        }
+
+    try:
+        while not rospy.is_shutdown():
+            now = time.time()
+            final_pose = current_pose(robot)
+            ee_pos = final_pose[:3]
+            rotation = current_rotation(robot)
+            tip_pos = physical_tip_position(ee_pos, rotation, tip_offset_ee)
+
+            ee_error_vec = target_ee_pos - ee_pos
+            ee_error = float(np.linalg.norm(ee_error_vec))
+            rot_error = target_rotation * rotation.inv()
+            rotvec = rot_error.as_rotvec()
+            angle_error = float(np.linalg.norm(rotvec) * 180.0 / np.pi)
+            ee_drift = float(np.linalg.norm(ee_pos - start_ee))
+
+            final_ee_error = ee_error
+            final_angle_error = angle_error
+            final_ee_drift = ee_drift
+            final_tip = tip_pos
+            current_violations = ee_workspace_violations(ee_pos, args)
+            sample_rows.append({
+                "unix_time": round(now, 6),
+                "elapsed_sec": round(now - start_time, 6),
+                "stage": label,
+                "tip_error_mm": float("nan"),
+                "ee_error_mm": round(ee_error, 6),
+                "orientation_error_deg": round(angle_error, 6),
+                "ee_drift_mm": round(ee_drift, 6),
+                "tip_x_mm": round(float(tip_pos[0]), 6),
+                "tip_y_mm": round(float(tip_pos[1]), 6),
+                "tip_z_mm": round(float(tip_pos[2]), 6),
+                "ee_x_mm": round(float(ee_pos[0]), 6),
+                "ee_y_mm": round(float(ee_pos[1]), 6),
+                "ee_z_mm": round(float(ee_pos[2]), 6),
+                "workspace_violation": "; ".join(current_violations),
+            })
+
+            if current_violations:
+                status = "workspace_limit"
+                break
+            if ee_error <= args.position_tol_mm and angle_error <= args.orientation_tol_deg:
+                if settled_since is None:
+                    settled_since = now
+                elif now - settled_since >= args.settle_s:
+                    status = "reached"
+                    break
+            else:
+                settled_since = None
+
+            if now >= deadline:
+                status = "timeout"
+                break
+
+            ee_linear_vel = clip_norm(
+                ee_error_vec * args.position_gain,
+                args.max_linear_vel,
+            )
+            angular_vel = clip_norm(
+                rotvec * args.orientation_gain,
+                args.max_angular_vel,
+            )
+            next_ee = ee_pos + ee_linear_vel / args.rate_hz
+            if ee_workspace_violations(next_ee, args):
+                status = "workspace_limit"
+                break
+
+            robot.pub_linear.publish(
+                float(ee_linear_vel[0]),
+                float(ee_linear_vel[1]),
+                float(ee_linear_vel[2]),
+            )
+            robot.pub_angular.publish(
+                float(angular_vel[0]),
+                float(angular_vel[1]),
+                float(angular_vel[2]),
+            )
+            rate.sleep()
+    finally:
+        stop_robot(robot)
+
+    ok = status == "reached"
+    print(
+        "  result: {}  ee_error={:.4f} mm  orientation_error={:.3f} deg  ee_drift={:.3f} mm".format(
+            status,
+            final_ee_error,
+            final_angle_error,
+            final_ee_drift,
+        )
+    )
+
+    return {
+        "stage": label,
+        "status": status,
+        "reached": ok,
+        "elapsed_sec": round(time.time() - start_time, 6),
+        "target_tip_x_mm": float("nan"),
+        "target_tip_y_mm": float("nan"),
+        "target_tip_z_mm": float("nan"),
+        "target_ee_x_mm": round(float(target_ee_pos[0]), 6),
+        "target_ee_y_mm": round(float(target_ee_pos[1]), 6),
+        "target_ee_z_mm": round(float(target_ee_pos[2]), 6),
+        "final_ee_x_mm": round(float(final_pose[0]), 6),
+        "final_ee_y_mm": round(float(final_pose[1]), 6),
+        "final_ee_z_mm": round(float(final_pose[2]), 6),
+        "final_tip_x_mm": round(float(final_tip[0]), 6),
+        "final_tip_y_mm": round(float(final_tip[1]), 6),
+        "final_tip_z_mm": round(float(final_tip[2]), 6),
+        "final_tip_error_mm": float("nan"),
+        "final_ee_error_mm": round(float(final_ee_error), 6),
+        "final_orientation_error_deg": round(float(final_angle_error), 6),
+        "final_ee_drift_mm": round(float(final_ee_drift), 6),
+        "final_handle_drift_mm": round(float(final_ee_drift), 6),
+        "workspace_violation": "",
+    }
 
 
 def move_tip_pose(
@@ -606,6 +813,23 @@ def main():
     print("  resolved oblique RPY deg: {}".format(
         np.round(oblique_rotation.as_euler("xyz", degrees=True), 4)
     ))
+    start_ee = (
+        ee_workspace_midpoint(args)
+        if args.start_ee_mm is None
+        else np.asarray(args.start_ee_mm, dtype=float)
+    )
+    start_rotation = (
+        perpendicular_rotation
+        if args.start_rpy_deg is None
+        else R.from_euler("xyz", args.start_rpy_deg, degrees=True)
+    )
+    print("  safe start FrameEE: {}".format(np.round(start_ee, 4)))
+    print("  safe start RPY deg: {}".format(
+        np.round(start_rotation.as_euler("xyz", degrees=True), 4)
+    ))
+    print("  safe start move: {}".format(
+        "skipped" if args.skip_start_ee_move else "enabled"
+    ))
     print("  steps mm: {}, {}, {}".format(
         args.first_step_mm,
         args.second_step_mm,
@@ -623,6 +847,8 @@ def main():
     if not args.yes:
         response = input(
             "\nThis script moves the handle to keep the physical tool tip as the rotation center.\n"
+            "Before tip-centered motion it first moves FrameEE to the safe start pose; "
+            "the physical tip will move during that setup.\n"
             "Confirm the tip offset is correct and the workspace is clear, then type YES: "
         ).strip()
         if response != "YES":
@@ -632,7 +858,26 @@ def main():
     sample_rows = []
 
     try:
-        current_tip = initial_tip.copy()
+        if not args.skip_start_ee_move:
+            prompt(
+                args,
+                "Stage 0: move FrameEE to the safe start pose. The physical tip will move.",
+            )
+            append_stage_or_abort(summary_rows, move_ee_pose(
+                robot,
+                "move_frameee_to_safe_start",
+                start_ee,
+                start_rotation,
+                tip_offset,
+                args,
+                sample_rows,
+            ))
+
+        current_tip = physical_tip_position(
+            current_pose(robot)[:3],
+            current_rotation(robot),
+            tip_offset,
+        )
 
         prompt(args, "Stage 1: rotate to perpendicular pose while holding the tip fixed.")
         append_stage_or_abort(summary_rows, move_tip_pose(

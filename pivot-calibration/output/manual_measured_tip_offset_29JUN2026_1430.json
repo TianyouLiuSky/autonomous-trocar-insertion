@@ -1,0 +1,88 @@
+{
+  "created": "29JUN2026_1430",
+  "method": "manual_physical_measurement",
+  "quality": "rough_manual_estimate",
+  "units": "millimeters",
+  "source_measurements": {
+    "marker_center_to_shaft_lateral_mm": 36.0,
+    "center_to_tip_axial_mm": 42.74
+  },
+  "robot_axis_convention": {
+    "x_positive": "in / forward",
+    "x_negative": "out / backward",
+    "y_positive": "left",
+    "y_negative": "right",
+    "z_positive": "up",
+    "z_negative": "down"
+  },
+  "assumptions": [
+    "FrameEE origin is approximated as the measured marker center.",
+    "Needle/trocar insertion direction is -Z for this provisional measurement.",
+    "The marker-center-to-shaft measurement is assigned to -Y, toward robot right.",
+    "The center-to-tip measurement is treated as an axial distance, not a diagonal distance.",
+    "Axis and sign must be validated with a small tip-centered rotation test before autonomous insertion."
+  ],
+  "t_gripper_tip_mm": [
+    0.0,
+    -36.0,
+    -42.74
+  ],
+  "t_robot_axis_tip_mm": [
+    0.0,
+    -36.0,
+    -42.74
+  ],
+  "T_gripper_tip_mm": [
+    [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0,
+      -36.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0,
+      -42.74
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "T_robot_axis_tip_mm": [
+    [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0,
+      -36.0
+    ],
+    [
+      0.0,
+      0.0,
+      1.0,
+      -42.74
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "needs_validation": true
+}

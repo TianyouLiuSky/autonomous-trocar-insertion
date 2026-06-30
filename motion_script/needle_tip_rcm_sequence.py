@@ -21,6 +21,10 @@ During rotation-only stages, the commanded end-effector linear velocity is:
     v_gripper = - omega x (R_base_gripper * t_gripper_tip_mm)
 
 so the physical tip stays fixed while the handle moves around it.
+
+Workspace safety limits apply to the robot-reported end-effector / FrameEE
+position only. The physical tool tip is allowed to differ from FrameEE by the
+configured rigid offset.
 """
 
 import argparse
@@ -143,7 +147,7 @@ def parse_args():
         metavar=("X", "Y", "Z"),
         default=DEFAULT_WORKSPACE_MIN_MM,
         help=(
-            "Minimum allowed FrameEE/gripper position in robot-base millimeters. "
+            "Minimum allowed robot end-effector / FrameEE position in robot-base millimeters. "
             "Axes: +X in/forward, +Y left, +Z up."
         ),
     )
@@ -154,7 +158,7 @@ def parse_args():
         metavar=("X", "Y", "Z"),
         default=DEFAULT_WORKSPACE_MAX_MM,
         help=(
-            "Maximum allowed FrameEE/gripper position in robot-base millimeters. "
+            "Maximum allowed robot end-effector / FrameEE position in robot-base millimeters. "
             "Axes: +X in/forward, +Y left, +Z up."
         ),
     )
@@ -162,12 +166,12 @@ def parse_args():
         "--workspace-tol-mm",
         type=float,
         default=0.5,
-        help="Tolerance around the configured FrameEE/gripper workspace bounds.",
+        help="Tolerance around the configured robot end-effector / FrameEE workspace bounds.",
     )
     parser.add_argument(
         "--disable-workspace-check",
         action="store_true",
-        help="Disable pre-motion and live FrameEE/gripper workspace checks.",
+        help="Disable pre-motion and live robot end-effector / FrameEE workspace checks.",
     )
     parser.add_argument(
         "--yes",
@@ -271,6 +275,7 @@ def workspace_bounds(args):
 
 
 def workspace_violations(position, args):
+    """Check robot end-effector / FrameEE bounds, never physical tool-tip bounds."""
     if not workspace_enabled(args):
         return []
     position = np.asarray(position, dtype=float)
@@ -346,7 +351,7 @@ def move_tip_pose(
     print("\nStage: {}".format(label))
     print("  start tip:  {}".format(np.round(start_tip, 4)))
     print("  target tip: {}".format(np.round(target_tip_pos, 4)))
-    print("  target gripper: {}".format(np.round(target_gripper, 4)))
+    print("  target FrameEE: {}".format(np.round(target_gripper, 4)))
     print(
         "  target rpy: {}".format(
             np.round(target_rotation.as_euler("xyz", degrees=True), 4)
@@ -357,7 +362,7 @@ def move_tip_pose(
     if target_violations:
         status = "workspace_target"
         final_pose = start_pose.copy()
-        print("  workspace target violation: {}".format("; ".join(target_violations)))
+        print("  FrameEE workspace target violation: {}".format("; ".join(target_violations)))
         return {
             "stage": label,
             "status": status,
@@ -581,7 +586,7 @@ def main():
     initial_violations = workspace_violations(initial_pose[:3], args)
     if initial_violations:
         raise RuntimeError(
-            "Initial FrameEE/gripper pose is outside workspace: {}".format(
+            "Initial robot end-effector / FrameEE pose is outside workspace: {}".format(
                 "; ".join(initial_violations)
             )
         )
@@ -606,7 +611,8 @@ def main():
     print("  max linear vel: {:.4f} mm/s".format(args.max_linear_vel))
     print("  max angular vel: {:.4f} rad/s".format(args.max_angular_vel))
     if workspace_enabled(args):
-        print("  FrameEE workspace: {}".format(workspace_summary(args)))
+        print("  FrameEE-only workspace: {}".format(workspace_summary(args)))
+        print("  workspace is enforced on robot end effector, not physical tool tip")
         print("  robot axes: +X in/forward, +Y left, +Z up")
     else:
         print("  FrameEE workspace check: disabled")

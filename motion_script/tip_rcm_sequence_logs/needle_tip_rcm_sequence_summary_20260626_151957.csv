@@ -1,0 +1,4 @@
+stage,status,reached,elapsed_sec,target_tip_x_mm,target_tip_y_mm,target_tip_z_mm,final_gripper_x_mm,final_gripper_y_mm,final_gripper_z_mm,final_tip_error_mm,final_orientation_error_deg,final_handle_drift_mm
+rotate_to_perpendicular_20deg,reached,True,0.260995,-24.796967,-115.904262,-11.886371,-13.794466,-108.990552,14.789504,0.0,0.00103,0.0
+insert_0p25mm_perpendicular,reached,True,1.891016,-24.882472,-115.904262,-12.121294,-13.865466,-108.990552,14.590504,0.038741,0.00103,0.211287
+rotate_to_60deg_about_tip,reached,True,39.550985,-24.867967,-115.904262,-12.085371,0.5179,-108.990552,1.633041,0.001619,0.8045,19.359307

@@ -7,9 +7,9 @@ Sequence:
 1. Rotate/settle to the perpendicular approach pose, default RPY (0, 20, 0).
 2. Move the physical tool tip along the needle direction for 0.25 mm.
 3. Rotate to the 30-degree oblique force-collection condition, about the tool tip.
-4. Move the physical tool tip along the oblique needle direction for 0.5 mm.
+4. Move the physical tool tip along the oblique needle direction for 2.0 mm.
 5. Rotate back to the perpendicular pose about the tool tip.
-6. Move the physical tool tip along the needle direction for 10 mm.
+6. Move the physical tool tip along the needle direction for 8 mm.
 
 The important distinction is that rotations are centered on the physical tool
 tip, not the robot end-effector origin. The script uses the calibrated
@@ -123,8 +123,8 @@ def parse_args():
         help="Select the side of the straight pose used for the oblique tilt.",
     )
     parser.add_argument("--first-step-mm", type=float, default=0.25)
-    parser.add_argument("--second-step-mm", type=float, default=0.5)
-    parser.add_argument("--final-step-mm", type=float, default=10.0)
+    parser.add_argument("--second-step-mm", type=float, default=2.0)
+    parser.add_argument("--final-step-mm", type=float, default=8.0)
     parser.add_argument(
         "--start-ee-mm",
         type=float,
@@ -950,7 +950,7 @@ def main():
         )
         append_stage_or_abort(summary_rows, move_tip_pose(
             robot,
-            "insert_0p5mm_30deg_oblique",
+            "insert_2mm_30deg_oblique",
             target_tip,
             oblique_rotation,
             tip_offset,
@@ -989,7 +989,7 @@ def main():
         )
         append_stage_or_abort(summary_rows, move_tip_pose(
             robot,
-            "insert_10mm_perpendicular",
+            "insert_8mm_perpendicular",
             target_tip,
             perpendicular_rotation,
             tip_offset,

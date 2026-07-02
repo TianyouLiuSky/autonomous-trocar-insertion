@@ -10,6 +10,7 @@ Sequence:
 4. Move the physical tool tip along the oblique needle direction for 2.0 mm.
 5. Rotate back to the perpendicular pose about the tool tip.
 6. Move the physical tool tip along the needle direction for 8 mm.
+7. Retract the physical tool tip back along the same perpendicular axis for 20 mm.
 
 The important distinction is that rotations are centered on the physical tool
 tip, not the robot end-effector origin. The script uses the calibrated
@@ -125,6 +126,7 @@ def parse_args():
     parser.add_argument("--first-step-mm", type=float, default=0.25)
     parser.add_argument("--second-step-mm", type=float, default=2.0)
     parser.add_argument("--final-step-mm", type=float, default=8.0)
+    parser.add_argument("--retract-step-mm", type=float, default=20.0)
     parser.add_argument(
         "--start-ee-mm",
         type=float,
@@ -748,6 +750,8 @@ def validate_args(args):
         raise ValueError("--orientation-tol-deg must be positive")
     if args.workspace_tol_mm < 0.0:
         raise ValueError("--workspace-tol-mm must be non-negative")
+    if args.retract_step_mm < 0.0:
+        raise ValueError("--retract-step-mm must be non-negative")
     lower, upper = ee_workspace_bounds(args)
     if lower.shape != (3,) or upper.shape != (3,):
         raise ValueError("workspace bounds must contain exactly 3 values")
@@ -830,10 +834,11 @@ def main():
     print("  safe start move: {}".format(
         "skipped" if args.skip_start_ee_move else "enabled"
     ))
-    print("  steps mm: {}, {}, {}".format(
+    print("  steps mm: {}, {}, {}, retract {}".format(
         args.first_step_mm,
         args.second_step_mm,
         args.final_step_mm,
+        args.retract_step_mm,
     ))
     print("  max linear vel: {:.4f} mm/s".format(args.max_linear_vel))
     print("  max angular vel: {:.4f} rad/s".format(args.max_angular_vel))
@@ -990,6 +995,29 @@ def main():
         append_stage_or_abort(summary_rows, move_tip_pose(
             robot,
             "insert_8mm_perpendicular",
+            target_tip,
+            perpendicular_rotation,
+            tip_offset,
+            args,
+            sample_rows,
+        ))
+
+        current_tip = physical_tip_position(
+            current_pose(robot)[:3],
+            current_rotation(robot),
+            tip_offset,
+        )
+        direction = needle_axis(perpendicular_rotation)
+        target_tip = current_tip - args.retract_step_mm * direction
+        prompt(
+            args,
+            "Stage 7: retract {:.3f} mm back along perpendicular needle direction.".format(
+                args.retract_step_mm
+            ),
+        )
+        append_stage_or_abort(summary_rows, move_tip_pose(
+            robot,
+            "retract_20mm_perpendicular",
             target_tip,
             perpendicular_rotation,
             tip_offset,

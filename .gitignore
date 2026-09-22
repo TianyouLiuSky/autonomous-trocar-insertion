@@ -3,3 +3,4 @@
 .DS_Store
 /camera-calibration/**/data/
 /camera-calibration/**/validation/
+/camera-calibration/**/ouput/

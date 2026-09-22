@@ -1,0 +1,5 @@
+# ROS1 (rospy, sensor_msgs, cv_bridge, message_filters) comes from the lab ROS workspace.
+# Use a Python3 environment compatible with that workspace; never install a second
+# cv2 distribution beside this one in the same environment.
+numpy>=1.21,<2
+opencv-contrib-python==4.10.0.84

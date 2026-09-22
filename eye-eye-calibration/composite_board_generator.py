@@ -77,6 +77,7 @@ def place_cell(canvas: np.ndarray, row: int, col: int,
     canvas[r0:r0 + h, c0:c0 + w] = patch
 
 def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     canvas = np.ones((TOTAL_PX, TOTAL_PX), dtype=np.uint8) * 255
 
     # Center ChArUco

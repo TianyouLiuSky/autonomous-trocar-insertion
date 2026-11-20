@@ -1,0 +1,52 @@
+# Runtime acquisitions and generated experiment results
+**/__pycache__/
+**/*.pyc
+.DS_Store
+**/data/sessions/
+**/raw_samples/
+**/logs/
+**/trials/
+**/recordings/
+**/captures_session/
+**/handeye_data/
+**/mic_live_stills/
+**/mic_calib_touch_stills/
+**/trial_plunge_stills/
+**/ring_depth_debug/
+**/backups/
+**/campaign_*/
+**/*.csv
+**/*.jsonl
+**/*.log
+**/*.pkl
+# Calibration results are not network weights.
+**/calibration/
+**/calibration_outputs/
+**/output/
+**/outputs/
+**/*.npz
+**/*.jpg
+**/*.jpeg
+**/cam_intrinsics*.npz
+**/handeye_T*.npz
+**/tip_offset*.npz
+**/mic_extrinsic_calib*.npz
+**/ring_to_entry_offset*.npz
+**/origin_correction*.npz
+**/phantom_normal*.npz
+**/needle_axis.npz
+**/auto_target.npz
+**/mic_entry_point.json
+**/*.mp4
+**/*.avi
+**/*.mkv
+# Preserve explicitly versioned model weights, including NumPy checkpoints.
+!**/weights/
+!**/weights/**
+!**/*.pt
+!**/*.pth
+!**/*.onnx
+!**/*.safetensors
+!**/*.ckpt
+
+!截屏2026-11-17 14.22.17.png

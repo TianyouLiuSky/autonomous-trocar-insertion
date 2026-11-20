@@ -63,6 +63,12 @@ Accepts two CSV schemas automatically (detected by header):
   - tip_pin_check_v3_fullpose.py's log:        ...,ee_px,ee_py,ee_pz,ee_qx,ee_qy,ee_qz,ee_qw,...
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys
@@ -71,7 +77,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_NPZ = os.path.join(HERE, "tip_offset_pivot_augmented.npz")
+OUT_NPZ = data_path("tip_offset_pivot_augmented.npz")
 LAMBDA_GRID = [0.0, 0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]
 
 

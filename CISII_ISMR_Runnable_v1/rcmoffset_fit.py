@@ -68,6 +68,12 @@ USAGE:
 Accepts the same two CSV schemas as pivot_residual_fit.py.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys
@@ -76,7 +82,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as Rot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_NPZ = os.path.join(HERE, "tip_offset_rcmoffset.npz")
+OUT_NPZ = data_path("tip_offset_rcmoffset.npz")
 
 
 def load_group(path):
@@ -171,16 +177,8 @@ def main():
     print("fitted d_const (mm) = %s" % np.array2string(d_const, precision=3))
 
     if save:
-        tip_inee_at_calib = None
-        try:
-            sys.path.insert(0, HERE)
-            from tip_inee_guard import read_live_tip_inee
-            import rospy
-            if not rospy.core.is_initialized():
-                rospy.init_node("rcmoffset_fit_save", anonymous=True, disable_signals=True)
-            tip_inee_at_calib = read_live_tip_inee(timeout_s=2.0)
-        except Exception as e:
-            print("  (could not read live TipInEE for provenance stamp: %s)" % e)
+        from runtime_session import expected_tip
+        tip_inee_at_calib = expected_tip()
         np.savez(OUT_NPZ, d_const=d_const, K=K, loo_rms_mm=rms_k, loo_rms_rigid_mm=rms_rigid,
                  n=n_total,
                  tip_inee_at_calib=tip_inee_at_calib if tip_inee_at_calib is not None else np.nan)

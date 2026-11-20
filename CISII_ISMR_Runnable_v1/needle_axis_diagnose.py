@@ -77,14 +77,20 @@ Reads PRECISION_LOG (same env var as the main script, default
 third_part/precision_log.csv). Does not touch the robot or camera --
 pure offline analysis of already-collected rows.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PRECISION_LOG = os.environ.get("PRECISION_LOG", os.path.join(HERE, "precision_log.csv"))
+PRECISION_LOG = os.environ.get("PRECISION_LOG", data_path("precision_log.csv"))
 TIP_OFFSET_RCMOFFSET_NPZ = os.environ.get(
-    "TIP_OFFSET_RCMOFFSET_NPZ", os.path.join(HERE, "tip_offset_rcmoffset.npz"))
+    "TIP_OFFSET_RCMOFFSET_NPZ", data_path("tip_offset_rcmoffset.npz"))
 
 
 def quat_to_R(q):

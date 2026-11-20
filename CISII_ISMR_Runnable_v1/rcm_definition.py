@@ -14,7 +14,7 @@ Two RCMs:
        Original: try_lock_microscope_rcm_live()   (lines ~3670-3834)
                  -> writes _vision_rcm["p"], S.rcm_source = "vision"
                  cur_rcm() / rcm_ok()              (lines ~2961-2971)
-       Used by the oblique TUNNEL and by ORIENT (pivot = E).
+       Used by the oblique TUNNEL. Initial ORIENT pivots about the current hover tip, not E.
 
   2. INTERNAL RCM P   the tip position at the end of the tunnel.
        Original: do_tunnel()                      (lines ~4092-4120)
@@ -29,6 +29,12 @@ Supporting pieces also extracted:
 
 Run `python3 rcm_definition.py` for a numerical self-test with synthetic data.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import numpy as np
 
 # ----------------------------------------------------------------------------

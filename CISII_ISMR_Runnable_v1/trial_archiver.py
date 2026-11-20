@@ -14,6 +14,12 @@ later save_manual_still.py / measure_trial_holes.py result is picked up too.
 
 Usage: nohup python3 trial_archiver.py > campaign_archiver.log 2>&1 &
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import glob
 import hashlib
@@ -22,22 +28,24 @@ import os
 import shutil
 import subprocess
 import time
+from pathlib import Path
 from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STILLS = os.path.join(HERE, "trial_plunge_stills")
-CAMPAIGN = os.path.join(os.path.dirname(HERE), "campaign_" + os.environ.get("CAMPAIGN_DATE", "20261012"))
-MIC = "/home/eyebrp/Matthew/microscope_autonomy"
-PREC = os.path.join(HERE, "precision_log.csv")
-CORR = os.path.join(HERE, "correspondence_log.csv")
-ORIENT_TRACE = os.path.join(HERE, "orient_trace_last.csv")
-REC_DIR = os.path.join(HERE, "recordings")
+STILLS = data_path("trial_plunge_stills")
+CAMPAIGN = data_path("campaign")
+MIC = str(ROOT / "microscope_autonomy")
+PREC = data_path("precision_log.csv")
+CORR = data_path("correspondence_log.csv")
+ORIENT_TRACE = data_path("orient_trace_last.csv")
+REC_DIR = data_path("recordings")
 HASHED = [os.path.join(HERE, "home_to_rcm_insert_v2_precision.py"), os.path.join(HERE, "run_main.sh"),
-          os.path.join(MIC, "mic_perception.py"), os.path.join(MIC, "mic_extrinsic_calib.npz"),
-          os.path.join(MIC, "ring_to_entry_offset.npz"), os.path.join(HERE, "origin_correction.npz"),
-          os.path.join(HERE, "tip_offset_rcmoffset.npz"), os.path.join(HERE, "phantom_normal.npz"),
-          os.path.join(os.path.dirname(HERE), "03_results_npz", "handeye_T.npz")]
-ENV_KEYS = ("MIC_", "TIP_", "PIERCE", "RETRACT", "MARK_", "NORMAL_", "HOVER", "PLUNGE", "TUNNEL",
+          os.path.join(MIC, "mic_perception.py"), data_path('mic_extrinsic_calib.npz'),
+          data_path('ring_to_entry_offset.npz'), data_path("origin_correction.npz"),
+          data_path("tip_offset_rcmoffset.npz"), data_path("phantom_normal.npz"),
+          data_path("handeye_T.npz")]
+HASHED += [data_path("cam_intrinsics.npz"), data_path("needle_axis.npz"), str(__import__("runtime_session").session_root()/"session.json")]
+ENV_KEYS = ("ISMR_", "HANDEYE_", "CAM_", "NEEDLE_", "MIC_", "TIP_", "PIERCE", "RETRACT", "MARK_", "NORMAL_", "HOVER", "PLUNGE", "TUNNEL",
             "INSERT", "ORIENT", "JOG", "BIPLANAR", "REC_", "PHANTOM", "MOVE_", "POS_TOL", "TRIAL_")
 STAGES = [("APPROACH", "err_mm"), ("ORIENT", "err_deg"), ("TUNNEL", "err_mm"),
           ("REORIENT(internal,perp)", "err_deg"), ("PLUNGE", "err_mm"), ("RETRACT_AXIAL", "err_mm"),
@@ -85,6 +93,8 @@ def log_rows(path, t0, t1):
         return None, []
     with open(path) as f:
         lines = f.read().splitlines()
+    if not lines:
+        return None, []
     header, out = lines[0], []
     for ln in lines[1:]:
         ts = ln.split(",", 1)[0]
@@ -110,7 +120,7 @@ def video_for(t_start):
 
 
 def archive(jp, prev_end, next_plunge=None):
-    d = json.load(open(jp))
+    d = json.loads(Path(jp).read_text())
     stem = os.path.basename(jp)[:-5]
     out = os.path.join(CAMPAIGN, stem)
     os.makedirs(out, exist_ok=True)
@@ -144,11 +154,11 @@ def archive(jp, prev_end, next_plunge=None):
                 shutil.copy2(f, dst)
     if stem not in _env_cache:
         _env_cache[stem] = {"controller": controller_env(), "md5": {os.path.basename(p): md5(p) for p in HASHED},
-                            "snapshot_time": time.time()}
+                            "snapshot_time": time.time(), "sha256": {os.path.basename(p): hashlib.sha256(open(p, "rb").read()).hexdigest() if os.path.isfile(p) else "missing" for p in HASHED}}
         cfg_path = os.path.join(out, "config_snapshot.json")
         if not os.path.exists(cfg_path):
-            json.dump(_env_cache[stem], open(cfg_path, "w"), indent=1)
-    cfg = json.load(open(os.path.join(out, "config_snapshot.json")))
+            Path(cfg_path).write_text(json.dumps(_env_cache[stem], indent=1))
+    cfg = json.loads(Path(out, "config_snapshot.json").read_text())
 
     stage = {}
     t_first = None

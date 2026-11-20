@@ -25,6 +25,12 @@ Keys:  left-click = hole (in 'hole' mode)
        s / Enter = save & next   k = skip (no row)   q = quit
 Usage:  python3 measure_trial_holes.py [--redo] [--summary]
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import argparse
 import csv
 import glob
@@ -36,13 +42,13 @@ import cv2
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MIC_DIR = "/home/eyebrp/Matthew/microscope_autonomy"
+MIC_DIR = str(ROOT / "microscope_autonomy")
 sys.path.insert(0, MIC_DIR)
 import mic_perception as mp  # noqa: E402
 
-STILLS_DIR = os.path.join(HERE, "trial_plunge_stills")
+STILLS_DIR = data_path("trial_plunge_stills")
 OUT_CSV = os.path.join(STILLS_DIR, "hole_measurements.csv")
-EXTRINSIC = os.path.join(MIC_DIR, "mic_extrinsic_calib.npz")
+EXTRINSIC = data_path('mic_extrinsic_calib.npz')
 ANGLE_DEG = float(os.environ.get("MIC_RCM_ANGLE_DEG", "25"))
 DISPLAY_SCALE = float(os.environ.get("MEASURE_DISPLAY_SCALE", "0.8"))
 FIELDS = ["trial", "json", "image", "status", "hole_u", "hole_v",

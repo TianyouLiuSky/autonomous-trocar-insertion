@@ -1,0 +1,359 @@
+[
+  {
+    "file": "ring_to_entry_offset_ACTIVE_microscope_autonomy.npz",
+    "source_url": "https://drive.google.com/file/d/1h1A2yYbR8ftv_k0J-cHrDDeEgqIoUeM5/view?usp=drivesdk",
+    "historical_sha256": "4cb56ff2b0fcbf0e9b8e371c5196929400bca6bfe94bd177fe81c45a153afe46",
+    "schema_only": {
+      "timestamp": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "source_samples": {
+        "shape": [],
+        "dtype": "<U82"
+      },
+      "offset_mark0": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "loo_rms_mm_mark0": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "n_samples_mark0": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "uncorrected_rms_mm_mark0": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "loo_errors_mm_mark0": {
+        "shape": [
+          8
+        ],
+        "dtype": "float64"
+      },
+      "bootstrap_ci_mm_mark0": {
+        "shape": [
+          2
+        ],
+        "dtype": "float64"
+      },
+      "offset_mark1": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "loo_rms_mm_mark1": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "n_samples_mark1": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "uncorrected_rms_mm_mark1": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "loo_errors_mm_mark1": {
+        "shape": [
+          8
+        ],
+        "dtype": "float64"
+      },
+      "bootstrap_ci_mm_mark1": {
+        "shape": [
+          2
+        ],
+        "dtype": "float64"
+      },
+      "offset_local_mark0": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "offset_local_std_mark0": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "offset_local_note": {
+        "shape": [],
+        "dtype": "<U155"
+      }
+    }
+  },
+  {
+    "file": "mic_extrinsic_calib_ACTIVE_microscope_autonomy.npz",
+    "source_url": "https://drive.google.com/file/d/1tWQLDaz71neWfsv34y8V2gyht4QGZPH4/view?usp=drivesdk",
+    "historical_sha256": "51bd626ed67de4e1f9447d219a28a652b069240204cf7b4be30273651bb03bd2",
+    "schema_only": {
+      "A": {
+        "shape": [
+          3,
+          3
+        ],
+        "dtype": "float64"
+      },
+      "z_plane_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "z_spread_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "labels_used": {
+        "shape": [
+          13
+        ],
+        "dtype": "<U11"
+      },
+      "resid_mm": {
+        "shape": [
+          13
+        ],
+        "dtype": "float64"
+      },
+      "px_uv": {
+        "shape": [
+          13,
+          2
+        ],
+        "dtype": "int64"
+      },
+      "base_xy": {
+        "shape": [
+          13,
+          2
+        ],
+        "dtype": "float64"
+      },
+      "base_xyz": {
+        "shape": [
+          13,
+          3
+        ],
+        "dtype": "float64"
+      },
+      "model": {
+        "shape": [],
+        "dtype": "<U21"
+      },
+      "source_image": {
+        "shape": [],
+        "dtype": "<U1"
+      },
+      "loo_rms_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "loo_errors_mm": {
+        "shape": [
+          13
+        ],
+        "dtype": "float64"
+      },
+      "n_calib_points": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "loo_xy_rms_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "loo_xy_errors_mm": {
+        "shape": [
+          13
+        ],
+        "dtype": "float64"
+      },
+      "loo_z_rms_mm": {
+        "shape": [],
+        "dtype": "float64"
+      }
+    }
+  },
+  {
+    "file": "tip_offset_rcmoffset.npz",
+    "source_url": "https://drive.google.com/file/d/13v1_k_g_V1k9V0HTOaDGe1lA5A3vS7VI/view?usp=drivesdk",
+    "historical_sha256": "5d913e7d5998861d7007b433083d2a8307617c717741194f98d14d7f85e3d515",
+    "schema_only": {
+      "d_const": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "K": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "loo_rms_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "loo_rms_rigid_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "n": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "tip_inee_at_calib": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "provenance_note": {
+        "shape": [],
+        "dtype": "<U572"
+      }
+    }
+  },
+  {
+    "file": "phantom_normal.npz",
+    "source_url": "https://drive.google.com/file/d/166-FAVHW9xvUcAaQy05H8BTrNuJC-H2a/view?usp=drivesdk",
+    "historical_sha256": "08aaacc22cf435ef182b587340f08877fce99ef49c38ad20aaa411d1b4100df5",
+    "schema_only": {
+      "point_base": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "normal_base": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "normal_cam": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "n_points": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "plane_rms_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "centroid_disagree_mm": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "patch_radius_px": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "n_red_dropped": {
+        "shape": [],
+        "dtype": "int64"
+      },
+      "t": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "normal_mode": {
+        "shape": [],
+        "dtype": "<U4"
+      }
+    }
+  },
+  {
+    "file": "handeye_T.npz",
+    "source_url": "https://drive.google.com/file/d/1Oo8XiORhN4gbSmoJ2Aj9EhaeU9IFdK9J/view?usp=drivesdk",
+    "historical_sha256": "62125a7c2149b46971cb436cb9f3aa0bc6bec8b9fb3e816400b200c532f91f06",
+    "schema_only": {
+      "R": {
+        "shape": [
+          3,
+          3
+        ],
+        "dtype": "float64"
+      },
+      "t": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "m": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "loo_rms": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "fit_rms": {
+        "shape": [],
+        "dtype": "float64"
+      }
+    }
+  },
+  {
+    "file": "origin_correction.npz",
+    "source_url": "https://drive.google.com/file/d/1t8qAn32NcrPlCVwLfxGuMFdU0nNe5495/view?usp=drivesdk",
+    "historical_sha256": "eda793d526d6f5c4b31be1491d39fff71cd7be3a810b09612e06cb11079548d9",
+    "schema_only": {
+      "correction": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "clicked_px": {
+        "shape": [
+          2
+        ],
+        "dtype": "int64"
+      },
+      "depth_m": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "ee_p_at_click": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "ee_q_at_click": {
+        "shape": [
+          4
+        ],
+        "dtype": "float64"
+      },
+      "cur_tip_at_click": {
+        "shape": [
+          3
+        ],
+        "dtype": "float64"
+      },
+      "timestamp": {
+        "shape": [],
+        "dtype": "float64"
+      },
+      "note": {
+        "shape": [],
+        "dtype": "<U336"
+      }
+    }
+  }
+]

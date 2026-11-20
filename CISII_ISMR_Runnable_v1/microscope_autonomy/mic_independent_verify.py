@@ -53,6 +53,12 @@ Subcommands:
       per-session breakdown -- the same statistical discipline already
       used for C1/C3 in the ISMR gap analysis.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import argparse
 import collections
 import datetime
@@ -467,13 +473,13 @@ def main():
     ap.add_argument("--gate", nargs="+", metavar="STILL.jpg")
     ap.add_argument("--campaign", action="store_true")
     ap.add_argument("--report", action="store_true")
-    ap.add_argument("--calib", default=os.path.join(HERE, "mic_extrinsic_calib.npz"))
+    ap.add_argument("--calib", default=data_path("mic_extrinsic_calib.npz"))
     ap.add_argument("--mark", type=int, default=0, choices=[0, 1])
     ap.add_argument("--label")
-    ap.add_argument("--touches", default=os.path.join(HERE, "mic_campaign_touches.jsonl"))
+    ap.add_argument("--touches", default=data_path("mic_campaign_touches.jsonl"))
     ap.add_argument("--gate-stills", nargs="+", metavar="STILL.jpg")
     ap.add_argument("--session", default=time.strftime("session_%Y%m%d"))
-    ap.add_argument("--log", default=os.path.join(HERE, "mic_campaign_log.csv"))
+    ap.add_argument("--log", default=data_path("mic_campaign_log.csv"))
     args = ap.parse_args()
 
     if args.click:

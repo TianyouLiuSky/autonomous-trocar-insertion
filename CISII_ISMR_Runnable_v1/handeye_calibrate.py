@@ -37,6 +37,12 @@ Output:
 
 from __future__ import print_function
 
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
+
 import json
 import os
 import shutil
@@ -51,7 +57,7 @@ import rospy
 from geometry_msgs.msg import Transform
 
 # #region agent log
-_DBG_LOG = "/home/eyebrp/.cursor/debug-17d00f.log"
+_DBG_LOG = data_path("handeye_debug.jsonl")
 _DBG_SESSION = "17d00f"
 
 
@@ -74,10 +80,10 @@ def _dbg(hypothesisId, location, message, data=None, runId="pre"):
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get(
-    "HANDEYE_DATA_DIR", os.path.join(HERE, "handeye_data")
+    "HANDEYE_DATA_DIR", data_path("handeye_data")
 )
 OUT_NPZ = os.environ.get(
-    "HANDEYE_NPZ", os.path.join(HERE, "handeye_T.npz")
+    "HANDEYE_NPZ", data_path("handeye_T.npz")
 )
 FRAMEEE_TOPIC = os.environ.get(
     "FRAMEEE_TOPIC", "/SHER21/eye_robot/FrameEE"
@@ -259,7 +265,7 @@ class RSCam(object):
             self.profile.get_device().first_depth_sensor().get_depth_scale()
         )
         cvs = self.profile.get_stream(rs.stream.color).as_video_stream_profile()
-        self.intr = cvs.get_intrinsics()
+        self.intr = __import__("intr_util").load_best_intrinsics(self.profile)
         for _ in range(20):
             self.pipe.wait_for_frames()
 

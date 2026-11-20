@@ -35,6 +35,12 @@ happens over in handeye_calibrate.py's window (SPACE there), this window
 only moves the robot.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import time
 

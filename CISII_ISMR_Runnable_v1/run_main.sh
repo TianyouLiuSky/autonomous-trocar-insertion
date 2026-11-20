@@ -26,16 +26,25 @@ set -e
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 MANUAL_JOG_RCM_PIVOT_DEFAULT=0
-if [ "$1" = "--trocar" ]; then
+if [ "${1:-}" = "--trocar" ]; then
     MANUAL_JOG_RCM_PIVOT_DEFAULT=1
     echo "run_main.sh: --trocar mode -> MANUAL_JOG_RCM_PIVOT=1 (rotate-about-live-RCM protection ON)"
     shift
 fi
 
 export DISPLAY="${DISPLAY:-:0}"
-export XAUTHORITY="${XAUTHORITY:-/home/eyebrp/.Xauthority}"
-source /opt/ros/melodic/setup.bash
-source /home/eyebrp/catkin_ws/devel/setup.bash 2>/dev/null || true
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+if [ -n "${ROS_SETUP:-}" ]; then source "$ROS_SETUP"; fi
+if [ -n "${CATKIN_SETUP:-}" ]; then source "$CATKIN_SETUP"; fi
+export ISMR_MODE="${ISMR_MODE:-calibration}"
+if [ "${1:-}" = "--insertion" ]; then export ISMR_MODE=insertion; shift; fi
+if [ "${1:-}" = "--help" ]; then
+    echo "Usage: bash run_main.sh [--trocar] [--insertion]"
+    echo "Default calibration mode blocks g/t/i/p; manual jog is live. Source ROS first."
+    exit 0
+fi
+export ISMR_SESSION="${ISMR_SESSION:?Run scripts/session.py init and export ISMR_SESSION first}"
+python3 scripts/preflight.py --phase "$ISMR_MODE"
 
 export PULSE_S="${PULSE_S:-2.0}"
 # 2026-10-11: target = point on mark0's own limbus-concentric circle, 25deg from the

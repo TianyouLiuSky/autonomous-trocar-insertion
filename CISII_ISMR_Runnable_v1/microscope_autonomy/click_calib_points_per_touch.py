@@ -42,6 +42,12 @@ Controls (per still):
     q / ESC     -- quit without saving anything further (keeps labels
                    already saved to --out if this is the 2nd+ run)
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import argparse
 import json
 import os
@@ -118,8 +124,8 @@ def click_one(path, label):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stills-dir", default="mic_calib_touch_stills")
-    ap.add_argument("--touches", default="mic_calib_touches.jsonl")
+    ap.add_argument("--stills-dir", default=data_path("mic_calib_touch_stills"))
+    ap.add_argument("--touches", default=data_path("mic_calib_touches.jsonl"))
     ap.add_argument("--out", default=None,
                      help="default: <stills-dir>/combined.calib_px.json")
     args = ap.parse_args()

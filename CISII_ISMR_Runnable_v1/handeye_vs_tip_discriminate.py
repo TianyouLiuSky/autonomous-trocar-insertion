@@ -48,6 +48,12 @@ is whatever it already was (unaffected by killing the demo process), so this
 only works if that mode accepts velocity commands, same as the demo did.
 """
 
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
+
 import datetime
 import os
 import sys
@@ -66,9 +72,9 @@ from intr_util import load_best_intrinsics  # noqa: E402
 from tip_inee_guard import assert_tip_inee  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-HANDEYE_NPZ = os.environ.get("HANDEYE_NPZ", os.path.join(HERE, "handeye_T.npz"))
+HANDEYE_NPZ = os.environ.get("HANDEYE_NPZ", data_path("handeye_T.npz"))
 RCM_NPZ = os.environ.get("TIP_OFFSET_RCMOFFSET_NPZ",
-                         os.path.join(HERE, "tip_offset_rcmoffset.npz"))
+                         data_path("tip_offset_rcmoffset.npz"))
 FRAMEEE_TOPIC = os.environ.get("FRAMEEE_TOPIC", "/SHER21/eye_robot/FrameEE")
 VEL_TOPIC = os.environ.get("VEL_TOPIC", "/SHER21/eyerobot2/desiredTipVelocities")
 ANG_TOPIC = os.environ.get("ANG_TOPIC", "/SHER21/eyerobot2/desiredTipVelocitiesAngular")
@@ -317,7 +323,7 @@ def main():
             samples.pop()
             print("  undo -> n=%d" % len(samples))
         if k == ord('s') and samples:
-            path = os.path.join(HERE, "handeye_vs_tip_%s.csv"
+            path = data_path("handeye_vs_tip_%s.csv"
                                 % datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
             with open(path, "w") as fh:
                 fh.write("px,py,pz,qx,qy,qz,qw,pred_u,pred_v,click_u,click_v,depth_mm\n")

@@ -87,6 +87,12 @@ Outputs:
   prints OLD (depth/Kabsch) vs NEW (reprojection) side by side.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import datetime
 import os
 import sys
@@ -96,11 +102,11 @@ import pyrealsense2 as rs
 from scipy.optimize import least_squares
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PAIRS_CSV = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "handeye_data", "pairs.csv")
-OLD_NPZ = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "handeye_T.npz")
-INTR_NPZ = os.path.join(HERE, "cam_intrinsics.npz")
-OUT_NPZ = sys.argv[3] if len(sys.argv) > 3 else os.path.join(HERE, "handeye_T_reproj.npz")
-OFFICIAL_NPZ = os.path.join(HERE, "handeye_T.npz")
+PAIRS_CSV = sys.argv[1] if len(sys.argv) > 1 else data_path("handeye_data", "pairs.csv")
+OLD_NPZ = sys.argv[2] if len(sys.argv) > 2 else data_path("handeye_T.npz")
+INTR_NPZ = data_path("cam_intrinsics.npz")
+OUT_NPZ = sys.argv[3] if len(sys.argv) > 3 else data_path("handeye_T_reproj.npz")
+OFFICIAL_NPZ = data_path("handeye_T.npz")
 
 VAL_CSV = os.environ.get("HANDEYE_VAL_CSV", "")
 ROBUST_LOSS = os.environ.get("ROBUST_LOSS", "huber")
@@ -119,7 +125,7 @@ def load_intrinsics():
         intr.fx, intr.fy = float(z["fx"]), float(z["fy"])
         intr.ppx, intr.ppy = float(z["ppx"]), float(z["ppy"])
         intr.width, intr.height = int(z["width"]), int(z["height"])
-        intr.model = rs.distortion.inverse_brown_conrady
+        intr.model = rs.distortion.brown_conrady
         intr.coeffs = [float(c) for c in z["coeffs"]]
         if "loo_rms_px" in z.files:
             print("  (cam_intrinsics.npz is self-calibrated: fit=%.2fpx LOO=%.2fpx, n=%d)" %
@@ -130,17 +136,7 @@ def load_intrinsics():
                   "first (see its docstring); a biased K/dist here silently biases every R,t,m "
                   "solved below without showing up in fit/LOO RMS.")
         return intr
-    print("  !! no cam_intrinsics.npz -- falling back to LIVE RealSense factory intrinsics "
-          "(definitely not self-calibrated). Strongly recommend camera_intrinsics_calibrate.py first.")
-    pipe = rs.pipeline()
-    cfg = rs.config()
-    cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    profile = pipe.start(cfg)
-    for _ in range(10):
-        pipe.wait_for_frames()
-    intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
-    pipe.stop()
-    return intr
+    raise ValueError("Fresh camera intrinsics required")
 
 
 def quat_to_R(q):
@@ -471,7 +467,7 @@ def main():
     if PROMOTE:
         if os.path.isfile(OFFICIAL_NPZ):
             stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup = os.path.join(HERE, "handeye_T_prev_%s.npz" % stamp)
+            backup = data_path("handeye_T_prev_%s.npz" % stamp)
             old = np.load(OFFICIAL_NPZ)
             np.savez(backup, **{k: old[k] for k in old.files})
             print("Backed up previous official calibration -> %s" % backup)

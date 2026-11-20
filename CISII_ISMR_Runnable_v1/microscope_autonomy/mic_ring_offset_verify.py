@@ -60,6 +60,12 @@ before the actual insertion move) -- it only makes the D405-only
 APPROACH/HOVER aid ('x') an honestly-validated correction instead of an
 anecdotal one.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import argparse
 import json
 import os
@@ -214,6 +220,18 @@ def do_fit(args):
         if r["bootstrap_ci_mm"] is not None:
             save["bootstrap_ci_mm_mark%d" % mark] = np.array(r["bootstrap_ci_mm"])
 
+    paired = [json.loads(line) for line in open(args.samples) if line.strip()]
+    nominal = [r for r in paired if r.get("mark0_theta_deg") is not None and r.get("mark0_radius_px") is not None]
+    if nominal:
+        angles = np.radians([r["mark0_theta_deg"] for r in nominal])
+        save["mark0_theta_deg"] = np.degrees(np.arctan2(np.sin(angles).mean(), np.cos(angles).mean()))
+        save["mark0_radius_px"] = np.mean([r["mark0_radius_px"] for r in nominal])
+    yaws=[]
+    for row in paired:
+        if row.get("mark0_base_mm") is not None and row.get("mark1_base_mm") is not None:
+            delta=np.asarray(row["mark1_base_mm"])-np.asarray(row["mark0_base_mm"])
+            if np.linalg.norm(delta[:2])>1e-6:yaws.append(np.arctan2(delta[1],delta[0]))
+    if yaws:save["training_yaw_deg"]=np.degrees(np.arctan2(np.sin(yaws).mean(),np.cos(yaws).mean()))
     np.savez(args.out, **save)
     print("\nSaved -> %s" % args.out)
     print("home_to_rcm_insert_v2_precision.py's 'x' key reads offset_mark%d from this file "
@@ -587,11 +605,11 @@ if __name__ == "__main__":
     ap.add_argument("--loo", action="store_true",
                      help="force-attempt leave-one-out even below n=5 (mainly for debugging; "
                           "the resulting number is not trustworthy)")
-    ap.add_argument("--samples", default="ring_offset_samples.jsonl")
-    ap.add_argument("--out", default="ring_to_entry_offset.npz")
-    ap.add_argument("--npz", default="ring_to_entry_offset.npz", help="for --report")
-    ap.add_argument("--out-circle", default="ring_to_entry_offset_circle.npz")
-    ap.add_argument("--npz-circle", default="ring_to_entry_offset_circle.npz", help="for --report-circle")
+    ap.add_argument("--samples", default=data_path("ring_offset_samples.jsonl"))
+    ap.add_argument("--out", default=data_path("ring_to_entry_offset.npz"))
+    ap.add_argument("--npz", default=data_path("ring_to_entry_offset.npz"), help="for --report")
+    ap.add_argument("--out-circle", default=data_path("ring_to_entry_offset_circle.npz"))
+    ap.add_argument("--npz-circle", default=data_path("ring_to_entry_offset_circle.npz"), help="for --report-circle")
     a = ap.parse_args()
     if a.fit:
         do_fit(a)

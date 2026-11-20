@@ -3,6 +3,12 @@
 (measure_trial_holes.py prefers it over the automatic post-retract stills) and mark the trial
 JSON with retract_adhesion=true. Use after re-seating a phantom that was dragged on RETRACT.
 Usage: python3 save_manual_still.py [--no-adhesion]"""
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import glob
 import json
 import os
@@ -11,8 +17,8 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-STILLS_DIR = os.path.join(HERE, "trial_plunge_stills")
-LIVE_DIR = "/home/eyebrp/Matthew/microscope_autonomy/mic_live_stills"
+STILLS_DIR = data_path("trial_plunge_stills")
+LIVE_DIR = data_path("mic_live_stills")
 
 jsons = sorted(glob.glob(os.path.join(STILLS_DIR, "trial*.json")), key=os.path.getmtime)
 if not jsons:

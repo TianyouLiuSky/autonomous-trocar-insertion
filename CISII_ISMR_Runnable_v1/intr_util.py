@@ -39,13 +39,19 @@ intrinsics with a printed diagnostic, so this is a safe drop-in
 replacement for the one-liner it replaces.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 
 import numpy as np
 import pyrealsense2 as rs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CAM_INTRINSICS_NPZ = os.environ.get("CAM_INTRINSICS_NPZ", os.path.join(HERE, "cam_intrinsics.npz"))
+CAM_INTRINSICS_NPZ = os.environ.get("CAM_INTRINSICS_NPZ", data_path("cam_intrinsics.npz"))
 
 
 def load_best_intrinsics(profile):
@@ -58,10 +64,7 @@ def load_best_intrinsics(profile):
     factory = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
 
     if not os.path.isfile(CAM_INTRINSICS_NPZ):
-        print("intr_util: no self-cal file at %s -- using RealSense FACTORY intrinsics "
-              "(fx=%.2f fy=%.2f ppx=%.2f ppy=%.2f)" %
-              (CAM_INTRINSICS_NPZ, factory.fx, factory.fy, factory.ppx, factory.ppy))
-        return factory
+        raise ValueError("Fresh cam_intrinsics.npz required; calibrate camera first")
 
     try:
         d = np.load(CAM_INTRINSICS_NPZ)
@@ -70,20 +73,20 @@ def load_best_intrinsics(profile):
         if missing:
             print("intr_util: %s is missing keys %s (old-format file?) -- using RealSense "
                   "FACTORY intrinsics instead" % (CAM_INTRINSICS_NPZ, missing))
-            return factory
+            raise ValueError("Invalid or incompatible fresh intrinsics")
 
         w, h = int(d["width"]), int(d["height"])
         if w != factory.width or h != factory.height:
             print("intr_util: cam_intrinsics.npz resolution %dx%d != live stream %dx%d -- "
                   "using RealSense FACTORY intrinsics instead (self-cal file is stale / for a "
                   "different mode)" % (w, h, factory.width, factory.height))
-            return factory
+            raise ValueError("Invalid or incompatible fresh intrinsics")
 
         intr = rs.intrinsics()
         intr.width, intr.height = factory.width, factory.height
         intr.fx, intr.fy = float(d["fx"]), float(d["fy"])
         intr.ppx, intr.ppy = float(d["ppx"]), float(d["ppy"])
-        intr.model = factory.model  # distortion MODEL unchanged, only coeffs come from self-cal
+        intr.model = rs.distortion.brown_conrady  # cv2.calibrateCamera writes forward Brown coefficients
         coeffs = [float(c) for c in np.asarray(d["coeffs"]).ravel()]
         coeffs = (coeffs + [0.0] * 5)[:5]
         intr.coeffs = coeffs
@@ -99,4 +102,4 @@ def load_best_intrinsics(profile):
     except Exception as e:
         print("intr_util: FAILED to load/parse %s (%r) -- falling back to RealSense FACTORY "
               "intrinsics" % (CAM_INTRINSICS_NPZ, e))
-        return factory
+        raise ValueError("Fresh intrinsics failed validation: %r" % e)

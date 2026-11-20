@@ -14,6 +14,12 @@ Both candidates are evaluated with the SAME intrinsics (live RealSense
 factory values, to match how the promoted n=100 fit was actually solved and
 avoid introducing a self-cal-intrinsics confound into the comparison).
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import sys
 
@@ -23,43 +29,47 @@ import pyrealsense2 as rs
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from handeye_reproj_refine import load_pairs_csv, recover_pixels, eval_on_set  # noqa: E402
 
-if len(sys.argv) < 4:
-    raise SystemExit(__doc__)
+def main():
+    if len(sys.argv) < 4:
+        raise SystemExit(__doc__)
 
-VAL_CSV = sys.argv[1]
-NPZ_PATHS = sys.argv[2:]
+    VAL_CSV = sys.argv[1]
+    NPZ_PATHS = sys.argv[2:]
 
-print("Loading LIVE RealSense factory intrinsics (camera must be free)...")
-pipe = rs.pipeline()
-cfg = rs.config()
-cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-profile = pipe.start(cfg)
-for _ in range(10):
-    pipe.wait_for_frames()
-intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
-pipe.stop()
-K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]], float)
-dist = np.array(list(intr.coeffs[:5]), float)
-print("  fx=%.2f fy=%.2f ppx=%.2f ppy=%.2f dist=%s\n" % (intr.fx, intr.fy, intr.ppx, intr.ppy, dist))
+    print("Loading LIVE RealSense factory intrinsics (camera must be free)...")
+    pipe = rs.pipeline()
+    cfg = rs.config()
+    cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    profile = pipe.start(cfg)
+    for _ in range(10):
+        pipe.wait_for_frames()
+    intr = __import__("intr_util").load_best_intrinsics(profile)
+    pipe.stop()
+    K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]], float)
+    dist = np.array(list(intr.coeffs[:5]), float)
+    print("  fx=%.2f fy=%.2f ppx=%.2f ppy=%.2f dist=%s\n" % (intr.fx, intr.fy, intr.ppx, intr.ppy, dist))
 
-Pcam_v, Pbe_v, Rbe_v = load_pairs_csv(VAL_CSV)
-n_val = len(Pcam_v)
-uv_v = recover_pixels(Pcam_v, intr)
-print("Held-out validation set: %d poses from %s\n" % (n_val, VAL_CSV))
+    Pcam_v, Pbe_v, Rbe_v = load_pairs_csv(VAL_CSV)
+    n_val = len(Pcam_v)
+    uv_v = recover_pixels(Pcam_v, intr)
+    print("Held-out validation set: %d poses from %s\n" % (n_val, VAL_CSV))
 
-results = []
-for path in NPZ_PATHS:
-    d = np.load(path)
-    R, t, m = d["R"], d["t"], d["m"]
-    n_fit = int(d["n"]) if "n" in d.files else -1
-    val_rms, val_err = eval_on_set(Pbe_v, Rbe_v, uv_v, K, dist, R, t, m)
-    results.append((path, n_fit, val_rms, val_err))
-    print("=== %s  (fit n=%d) ===" % (os.path.basename(path), n_fit))
-    print("  validation RMS on %d NEW poses = %.2f px" % (n_val, val_rms))
-    print("  per-pose errors: %s\n" % np.array2string(val_err, precision=2))
+    results = []
+    for path in NPZ_PATHS:
+        d = np.load(path)
+        R, t, m = d["R"], d["t"], d["m"]
+        n_fit = int(d["n"]) if "n" in d.files else -1
+        val_rms, val_err = eval_on_set(Pbe_v, Rbe_v, uv_v, K, dist, R, t, m)
+        results.append((path, n_fit, val_rms, val_err))
+        print("=== %s  (fit n=%d) ===" % (os.path.basename(path), n_fit))
+        print("  validation RMS on %d NEW poses = %.2f px" % (n_val, val_rms))
+        print("  per-pose errors: %s\n" % np.array2string(val_err, precision=2))
 
-print("=== VERDICT ===")
-best = min(results, key=lambda r: r[2])
-for path, n_fit, val_rms, _ in sorted(results, key=lambda r: r[2]):
-    flag = "  <-- LOWER = better generalization" if path == best[0] else ""
-    print("  %-55s fit_n=%-4d val_rms=%.2fpx%s" % (os.path.basename(path), n_fit, val_rms, flag))
+    print("=== VERDICT ===")
+    best = min(results, key=lambda r: r[2])
+    for path, n_fit, val_rms, _ in sorted(results, key=lambda r: r[2]):
+        flag = "  <-- LOWER = better generalization" if path == best[0] else ""
+        print("  %-55s fit_n=%-4d val_rms=%.2fpx%s" % (os.path.basename(path), n_fit, val_rms, flag))
+
+if __name__ == "__main__":
+    main()

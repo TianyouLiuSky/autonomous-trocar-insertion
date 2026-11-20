@@ -10,6 +10,12 @@ mount) moved after 16:31.
 
 Usage: python3 handeye_live_recheck.py
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import sys
 import time
@@ -24,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from handeye_calibrate import detect_aruco  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-he = np.load(os.path.join(HERE, "handeye_T.npz"))
+he = np.load(data_path("handeye_T.npz"))
 R_cb, t_cb, m = he["R"], he["t"], he["m"]
 print("Loaded handeye_T.npz (fit=%.2fpx loo=%.2fpx val=%.2fpx, n=%d)" %
       (float(he["fit_rms_px"]), float(he["loo_rms_px"]), float(he["val_rms_px"]), int(he["n"])))
@@ -53,7 +59,7 @@ pipe = rs.pipeline()
 cfg = rs.config()
 cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 profile = pipe.start(cfg)
-intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+intr = __import__("intr_util").load_best_intrinsics(profile)
 K = np.array([[intr.fx, 0, intr.ppx], [0, intr.fy, intr.ppy], [0, 0, 1]], float)
 dist = np.array(list(intr.coeffs[:5]), float)
 for _ in range(15):
@@ -101,7 +107,7 @@ try:
         if k in (ord('q'), 27):
             break
         elif k == ord('s'):
-            cv2.imwrite(os.path.join(HERE, "handeye_live_recheck_snap.png"), img)
+            cv2.imwrite(data_path("handeye_live_recheck_snap.png"), img)
             print("saved snapshot")
 finally:
     pipe.stop()

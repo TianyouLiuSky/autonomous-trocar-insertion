@@ -34,6 +34,12 @@ whole point of this script is the log):
 Ctrl-C to quit.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys
@@ -46,7 +52,7 @@ from geometry_msgs.msg import Transform
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMEEE_TOPIC = os.environ.get("FRAMEEE_TOPIC", "/SHER21/eye_robot/FrameEE")
 TIP_OFFSET_PIVOT_NPZ = os.environ.get(
-    "TIP_OFFSET_PIVOT_NPZ", os.path.join(HERE, "tip_offset_pivot.npz"))
+    "TIP_OFFSET_PIVOT_NPZ", data_path("tip_offset_pivot.npz"))
 LOG_CSV = os.environ.get("TIP_PIN_LOG_CSV", "").strip()
 
 _ee = {"p": None, "q": None}

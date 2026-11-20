@@ -556,6 +556,12 @@ except the two precision fixes called out above):
   ORIENT_HOLD_MAX_MM_S  (default 2.0)   cap on the trim term above
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import re
 import sys
@@ -607,10 +613,10 @@ import concurrent.futures
 from sensor_msgs.msg import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-NPZ = os.environ.get("HANDEYE_NPZ", os.path.join(HERE, "handeye_T.npz"))
-TIP_OFFSET_NPZ = os.environ.get("TIP_OFFSET_NPZ", os.path.join(HERE, "tip_offset.npz"))
+NPZ = os.environ.get("HANDEYE_NPZ", data_path("handeye_T.npz"))
+TIP_OFFSET_NPZ = os.environ.get("TIP_OFFSET_NPZ", data_path("tip_offset.npz"))
 TIP_OFFSET_PIVOT_NPZ = os.environ.get(
-    "TIP_OFFSET_PIVOT_NPZ", os.path.join(HERE, "tip_offset_pivot.npz")
+    "TIP_OFFSET_PIVOT_NPZ", data_path("tip_offset_pivot.npz")
 )
 # 2026-08-25: orientation-DEPENDENT tip model (pivot_residual_fit.py), opt-in
 # via TIP_MODEL=augmented. Do NOT use "augmented" -- it scored the best
@@ -638,7 +644,7 @@ TIP_OFFSET_PIVOT_NPZ = os.environ.get(
 # either way, so this is not a silent behavior change.
 TIP_MODEL = os.environ.get("TIP_MODEL", "rcmoffset").strip().lower()
 TIP_OFFSET_PIVOT_AUGMENTED_NPZ = os.environ.get(
-    "TIP_OFFSET_PIVOT_AUGMENTED_NPZ", os.path.join(HERE, "tip_offset_pivot_augmented.npz")
+    "TIP_OFFSET_PIVOT_AUGMENTED_NPZ", data_path("tip_offset_pivot_augmented.npz")
 )
 # 2026-08-25 (later same day): TIP_MODEL=rcmoffset -- see rcmoffset_fit.py's
 # docstring. NOT a generic empirical fit like "augmented" above: this is the
@@ -652,17 +658,17 @@ TIP_OFFSET_PIVOT_AUGMENTED_NPZ = os.environ.get(
 # the fit range the way "augmented" can. Prefer this over "augmented" unless
 # a head-to-head test on new data says otherwise.
 TIP_OFFSET_RCMOFFSET_NPZ = os.environ.get(
-    "TIP_OFFSET_RCMOFFSET_NPZ", os.path.join(HERE, "tip_offset_rcmoffset.npz")
+    "TIP_OFFSET_RCMOFFSET_NPZ", data_path("tip_offset_rcmoffset.npz")
 )
-AUTO_TARGET_NPZ = os.environ.get("AUTO_TARGET_NPZ", os.path.join(HERE, "auto_target.npz"))
+AUTO_TARGET_NPZ = os.environ.get("AUTO_TARGET_NPZ", data_path("auto_target.npz"))
 AUTO_TARGET_MAX_AGE_S = float(os.environ.get("AUTO_TARGET_MAX_AGE_S", "5.0"))
-NORMAL_NPZ = os.environ.get("NORMAL_NPZ", os.path.join(HERE, "phantom_normal.npz"))
+NORMAL_NPZ = os.environ.get("NORMAL_NPZ", data_path("phantom_normal.npz"))
 # 2026-10-05: append-only history of EVERY 'n' press (NORMAL_NPZ above only
 # ever keeps the latest one) -- see phantom_normal_repeatability.py. Press
 # 'n' several times in a row WITHOUT moving anything (phantom, scope, robot)
 # to build a same-pose repeatability dataset before trusting MIC_RCM_MODE=
 # circle for a real campaign.
-NORMAL_SAMPLES_LOG = os.environ.get("NORMAL_SAMPLES_LOG", os.path.join(HERE, "phantom_normal_samples.jsonl"))
+NORMAL_SAMPLES_LOG = os.environ.get("NORMAL_SAMPLES_LOG", data_path("phantom_normal_samples.jsonl"))
 INSERT_ANGLE_DEG = float(os.environ.get("INSERT_ANGLE_DEG", "30.0"))  # off the surface normal
 
 # 2026-09-15: fixes the "TIP dot doesn't line up with the real needle tip"
@@ -683,7 +689,7 @@ INSERT_ANGLE_DEG = float(os.environ.get("INSERT_ANGLE_DEG", "30.0"))  # off the 
 # below for how this is measured; ORIGIN_CORRECTION is added to every
 # /FrameEE and /RCMPoint reading at the point they're received.
 ORIGIN_CORRECTION_NPZ = os.environ.get(
-    "ORIGIN_CORRECTION_NPZ", os.path.join(HERE, "origin_correction.npz")
+    "ORIGIN_CORRECTION_NPZ", data_path("origin_correction.npz")
 )
 # 2026-10-11: a 'c' click that lands on BACKGROUND depth (~0.6-0.8m on this
 # rig, vs the needle's real ~0.1-0.2m) produces a 300-500mm ORIGIN_CORRECTION
@@ -702,7 +708,7 @@ ORIGIN_CLICK_DZ_MAX_M = float(os.environ.get("ORIGIN_CLICK_DZ_MAX_M", "0.012"))
 # check is possible, see mic_extrinsic_calib.py --loo). See
 # /home/eyebrp/Matthew/microscope_autonomy/README.md.
 MIC_CALIB_LOG = os.environ.get(
-    "MIC_CALIB_LOG", os.path.join(HERE, "mic_calib_touches.jsonl")
+    "MIC_CALIB_LOG", data_path("mic_calib_touches.jsonl")
 )
 # 2026-10-01 (pt.2): per-touch microscope snapshot, saved automatically by
 # log_mic_calib_touch() at the moment '1'-'8' is pressed. WHY: the original
@@ -720,13 +726,13 @@ MIC_CALIB_LOG = os.environ.get(
 # click_calib_points_per_touch.py, which clicks each of these per-point
 # stills instead of one shared still.
 MIC_CALIB_TOUCH_STILLS_DIR = os.environ.get(
-    "MIC_CALIB_TOUCH_STILLS_DIR", os.path.join(HERE, "mic_calib_touch_stills")
+    "MIC_CALIB_TOUCH_STILLS_DIR", data_path("mic_calib_touch_stills")
 )
 # Written OFFLINE by mic_extrinsic_calib.py --still --mark {0,1} -- an entry
 # point (one of the two confirmed candidate sclerotomy sites) already
 # converted from a microscope still into robot base-frame XYZ. 'e' loads it.
 MIC_ENTRY_POINT_JSON = os.environ.get(
-    "MIC_ENTRY_POINT_JSON", os.path.join(HERE, "mic_entry_point.json")
+    "MIC_ENTRY_POINT_JSON", data_path("mic_entry_point.json")
 )
 
 # 2026-09-21: one-key "live" version of the same correction, for use RIGHT
@@ -739,17 +745,17 @@ MIC_ENTRY_POINT_JSON = os.environ.get(
 # this machine (same manual transfer path already used for every prior
 # capture in this project, e.g. USB/network copy into "Lecia Microscope/").
 MIC_AUTONOMY_DIR = os.environ.get(
-    "MIC_AUTONOMY_DIR", "/home/eyebrp/Matthew/microscope_autonomy"
+    "MIC_AUTONOMY_DIR", str(ROOT / "microscope_autonomy")
 )
 MIC_EXTRINSIC_CALIB_NPZ = os.environ.get(
-    "MIC_EXTRINSIC_CALIB_NPZ", os.path.join(MIC_AUTONOMY_DIR, "mic_extrinsic_calib.npz")
+    "MIC_EXTRINSIC_CALIB_NPZ", data_path('mic_extrinsic_calib.npz')
 )
 MIC_LIVE_STILLS_DIR = os.environ.get(
     "MIC_LIVE_STILLS_DIR", os.path.join(MIC_AUTONOMY_DIR, "mic_live_stills")
 )
 # Post-PLUNGE microscope ground-truth stills (needle still embedded), one set per trial.
 # Trial number = number of trials already in this dir + 1, so it survives restarts.
-TRIAL_STILLS_DIR = os.environ.get("TRIAL_STILLS_DIR", os.path.join(HERE, "trial_plunge_stills"))
+TRIAL_STILLS_DIR = os.environ.get("TRIAL_STILLS_DIR", data_path("trial_plunge_stills"))
 TRIAL_STILLS_N = int(os.environ.get("TRIAL_STILLS_N", "3"))
 TRIAL_STILLS_TIMEOUT_S = float(os.environ.get("TRIAL_STILLS_TIMEOUT_S", "5.0"))
 # 2026-10-05: the user's correction -- the microscope feed is a genuine
@@ -905,8 +911,14 @@ MIC_TARGET_EDGE_MARGIN_PX = float(os.environ.get("MIC_TARGET_EDGE_MARGIN_PX", "6
 MIC_CIRCLE_D405_MODEL = os.environ.get("MIC_CIRCLE_D405_MODEL", "fixed")
 assert MIC_CIRCLE_D405_MODEL in ("fixed", "tangent")
 # mark0 polar position around the plug centre, 3 post-retract stills of trial 2 (2026-10-11)
-MIC_NOMINAL_MARK_THETA_DEG = float(os.environ.get("MIC_NOMINAL_MARK_THETA_DEG", "-165.1"))
-MIC_NOMINAL_MARK_R_PX = float(os.environ.get("MIC_NOMINAL_MARK_R_PX", "501.5"))
+MIC_NOMINAL_MARK_THETA_DEG = float(os.environ.get("MIC_NOMINAL_MARK_THETA_DEG", "nan"))
+MIC_NOMINAL_MARK_R_PX = float(os.environ.get("MIC_NOMINAL_MARK_R_PX", "nan"))
+if os.path.isfile(data_path("ring_to_entry_offset.npz")):
+    with np.load(data_path("ring_to_entry_offset.npz"), allow_pickle=False) as _nom:
+        if "mark0_theta_deg" in _nom and "mark0_radius_px" in _nom:
+            MIC_NOMINAL_MARK_THETA_DEG = float(_nom["mark0_theta_deg"])
+            MIC_NOMINAL_MARK_R_PX = float(_nom["mark0_radius_px"])
+
 # Must match mic_perception's MIC_TARGET_ANGLE_REL_MARK: MIC_RCM_ANGLE_DEG is then an offset
 # from the measured mark angle (rotation-invariant target).
 MIC_ANGLE_REL_MARK = os.environ.get("MIC_TARGET_ANGLE_REL_MARK", "") != ""
@@ -975,7 +987,7 @@ MIC_LIVE_MAX_AGE_S = float(os.environ.get("MIC_LIVE_MAX_AGE_S", "5"))
 # closer to the real target than raw ring-center -- still not a substitute
 # for 'y'/'e' right before the actual insertion move.
 RING_TO_ENTRY_OFFSET_NPZ = os.environ.get(
-    "RING_TO_ENTRY_OFFSET_NPZ", os.path.join(MIC_AUTONOMY_DIR, "ring_to_entry_offset.npz")
+    "RING_TO_ENTRY_OFFSET_NPZ", data_path('ring_to_entry_offset.npz')
 )
 # 2026-10-05: output of mic_ring_offset_verify.py --fit-circle -- the
 # phantom-pose-invariant, tangent-plane-local-frame generalization of the
@@ -983,7 +995,7 @@ RING_TO_ENTRY_OFFSET_NPZ = os.environ.get(
 # base-frame XYZ offset -- see tangent_frame_from_normal() in
 # mic_extrinsic_calib.py). Only read when MIC_RCM_MODE=="circle".
 RING_TO_ENTRY_OFFSET_CIRCLE_NPZ = os.environ.get(
-    "RING_TO_ENTRY_OFFSET_CIRCLE_NPZ", os.path.join(MIC_AUTONOMY_DIR, "ring_to_entry_offset_circle.npz")
+    "RING_TO_ENTRY_OFFSET_CIRCLE_NPZ", data_path('ring_to_entry_offset_circle.npz')
 )
 # 2026-09-28: append-only log of PAIRED (D405 ring-lock, microscope
 # entry-mark) samples, written by the '0' key (log_ring_offset_sample()).
@@ -992,7 +1004,7 @@ RING_TO_ENTRY_OFFSET_CIRCLE_NPZ = os.environ.get(
 # mic_extrinsic_calib.py --ring-offset's old single-snapshot fit (which had
 # zero held-out validation -- see mic_ring_offset_verify.py's docstring).
 RING_OFFSET_SAMPLES_LOG = os.environ.get(
-    "RING_OFFSET_SAMPLES_LOG", os.path.join(HERE, "ring_offset_samples.jsonl")
+    "RING_OFFSET_SAMPLES_LOG", data_path("ring_offset_samples.jsonl")
 )
 
 # 2026-09-21: SHIFT+H records one hand-eye (ArUco-on-shaft) calibration
@@ -1002,7 +1014,7 @@ RING_OFFSET_SAMPLES_LOG = os.environ.get(
 # relaunch...). Writes the EXACT SAME CSV schema handeye_calibrate.py's own
 # interactive loop uses, so that script's "Resumed N pairs" auto-load + 's'
 # to solve still works unmodified once you're done collecting samples here.
-HANDEYE_DATA_DIR = os.environ.get("HANDEYE_DATA_DIR", os.path.join(HERE, "handeye_data"))
+HANDEYE_DATA_DIR = os.environ.get("HANDEYE_DATA_DIR", data_path("handeye_data"))
 HANDEYE_PAIRS_CSV = os.environ.get("HANDEYE_PAIRS_CSV", os.path.join(HANDEYE_DATA_DIR, "pairs.csv"))
 HANDEYE_SAMPLE_N_TARGET = int(os.environ.get("HANDEYE_SAMPLE_N_TARGET", "12"))
 sys.path.insert(0, HERE)
@@ -1014,7 +1026,7 @@ except Exception as _e:
     _ARUCO_IMPORT_ERR = str(_e)
 
 
-def calib_freshness_problems():
+def calib_freshness_problems(phase="use"):
     """Every artifact whose numbers were computed THROUGH R_he/t_he (or
     through the microscope's current physical pose) must be newer than the
     hand-eye it is combined with. Returns a list of human-readable problems;
@@ -1031,11 +1043,15 @@ def calib_freshness_problems():
              if (MIC_RCM_MODE == "circle" and MIC_CIRCLE_D405_MODEL == "tangent") else
              ("ring_to_entry_offset", RING_TO_ENTRY_OFFSET_NPZ,
               "'0' samples + mic_ring_offset_verify.py --fit"))]
+    if phase == "collect":
+        deps = [d for d in deps if not d[0].startswith("ring_to_entry_offset")]
+    elif phase != "use":
+        raise ValueError("unknown calibration phase")
     for name, path, how in deps:
         rp = os.path.realpath(path)
         if not os.path.isfile(rp):
             probs.append("%s MISSING (%s)" % (name, how))
-        elif os.path.getmtime(rp) < he_t and name != "mic_extrinsic_calib":
+        elif os.path.getmtime(rp) < he_t:
             probs.append("%s OLDER than handeye_T.npz (%s)" % (name, how))
     if float(np.linalg.norm(ORIGIN_CORRECTION)) > ORIGIN_CORRECTION_MAX_MM:
         probs.append("ORIGIN_CORRECTION |%.0f|mm too large" % np.linalg.norm(ORIGIN_CORRECTION))
@@ -1122,12 +1138,12 @@ VIS3D_MAX_STABILITY_DEG = float(os.environ.get("VIS3D_MAX_STABILITY_DEG", "5.0")
 VIS3D_STABILITY_SPLITS = int(os.environ.get("VIS3D_STABILITY_SPLITS", "5"))
 _VIS3D_RNG = np.random.RandomState(12345)  # fixed seed: reproducible RANSAC across runs
 _VIS3D_STABILITY_RNG = np.random.RandomState(20260821)  # separate stream for half-split resampling
-PRECISION_LOG = os.environ.get("PRECISION_LOG", os.path.join(HERE, "precision_log.csv"))
+PRECISION_LOG = os.environ.get("PRECISION_LOG", data_path("precision_log.csv"))
 # pt.22 (2026-09-28): per-tick ORIENT diagnostic trace, see auto_orient_
 # about_rcm()'s docstring/_flush_orient_trace() -- overwritten (not
 # appended) on every ORIENT call, so it always holds the MOST RECENT attempt
 # for inspection after the fact.
-ORIENT_TRACE_CSV = os.environ.get("ORIENT_TRACE_CSV", os.path.join(HERE, "orient_trace_last.csv"))
+ORIENT_TRACE_CSV = os.environ.get("ORIENT_TRACE_CSV", data_path("orient_trace_last.csv"))
 
 # --- live, in-process RCM ring detection -- same env var names/defaults as
 # auto_target_vision.py, see module docstring pt.6 ---
@@ -1243,7 +1259,7 @@ RCMPOINT_TOPIC = os.environ.get("RCMPOINT_TOPIC", "/SHER21/eye_robot/RCMPoint")
 # (robotModel.cpp ComputeActuatorToJointPosition: outJointVal[3] =
 # inActuatorVal[4] * 0.0005 * cmnPI_180 -- degrees->radians conversion).
 JOINTPOS_TOPIC = os.environ.get("JOINTPOS_TOPIC", "/SHER21/eye_robot/JointPosition")
-RECORD_DIR = os.environ.get("OVERLAY_RECORD_DIR", os.path.join(HERE, "recordings"))
+RECORD_DIR = os.environ.get("OVERLAY_RECORD_DIR", data_path("recordings"))
 
 SPEED = float(os.environ.get("JOG_SPEED", "3.0"))
 SPEED_MAX = float(os.environ.get("JOG_MAX", "8.0"))
@@ -1892,8 +1908,13 @@ NORMAL_RING_FRAMES = int(os.environ.get("NORMAL_RING_FRAMES", "10"))
 NORMAL_RING_MAX_SPREAD_DEG = float(os.environ.get("NORMAL_RING_MAX_SPREAD_DEG", "8.0"))
 PHANTOM_MAX_TILT_DEG = float(os.environ.get("PHANTOM_MAX_TILT_DEG", "10.0"))
 # mark0->mark1 direction (base XY) of the 2026-10-11 n=8 ring-offset training set: 34.0-36.9deg.
-PHANTOM_TRAIN_YAW_DEG = float(os.environ.get("PHANTOM_TRAIN_YAW_DEG", "35.7"))
+PHANTOM_TRAIN_YAW_DEG = float(os.environ.get("PHANTOM_TRAIN_YAW_DEG", "nan"))
 PHANTOM_MAX_YAW_DEG = float(os.environ.get("PHANTOM_MAX_YAW_DEG", "5.0"))
+if os.path.isfile(RING_TO_ENTRY_OFFSET_NPZ):
+    with np.load(RING_TO_ENTRY_OFFSET_NPZ, allow_pickle=False) as _yaw_model:
+        if "training_yaw_deg" in _yaw_model:
+            PHANTOM_TRAIN_YAW_DEG = float(_yaw_model["training_yaw_deg"])
+
 
 
 def ring_pixels_depth_mm(color_bgr, depth_mm, cx, cy, r_px, rng=None):
@@ -2336,7 +2357,7 @@ def draw_help(view, sc=1.0):
     H_, W_ = view.shape[:2]
     groups = [
         ("SETUP", "z ring lock    n surface normal    ` mic<->D405 check + lock    y mic lock"),
-        ("RUN", "h home   g approach   t orient   i tunnel   p plunge   b retract   space STOP"),
+        ("RUN", "h home  g approach  t ORIENT+TUNNEL  p REORIENT+PLUNGE  b retract  space STOP"),
         ("MIC CAL", "1-8 , . / ; ' - =  touch points    9 campaign touch    0 ring-offset sample"),
         ("CALIB", "SHIFT+H hand-eye sample    c origin (click tip)    SHIFT+C clear origin"),
         ("JOG", "w/s a/d r/f  xyz     k/m j/l u/o  rot     ] [  speed"),
@@ -2537,7 +2558,7 @@ def log_precision(action, **fields):
 # central claim. (The '`' key ALSO still appends to ring_offset_samples.jsonl,
 # see try_correspondence_check(), so none of the existing --fit/--fit-circle/
 # --compare tooling loses access to this data either -- this is additive.)
-CORRESPONDENCE_LOG = os.environ.get("CORRESPONDENCE_LOG", os.path.join(HERE, "correspondence_log.csv"))
+CORRESPONDENCE_LOG = os.environ.get("CORRESPONDENCE_LOG", data_path("correspondence_log.csv"))
 CORRESPONDENCE_LOG_FIELDS = [
     "timestamp", "trial_index", "home_x_mm", "home_y_mm", "home_z_mm",
     "mic_rcm_mode", "mic_target_mark",
@@ -2592,6 +2613,8 @@ class S:
 
 def main():
     global SPEED, ASPEED
+    from runtime_session import startup_check
+    startup_check()
     # Must happen before ANY rospy.Subscriber/Publisher/get_time call -- in
     # particular before the tip_inee_guard.assert_tip_inee() check below,
     # which otherwise silently times out (its Subscriber never connects
@@ -2822,49 +2845,9 @@ def main():
     else:
         NEEDLE_AXIS_LOCAL = np.array([0.0, 0.0, -1.0])
 
-    # 2026-08-26: independent-vision override for NEEDLE_AXIS_LOCAL.
-    #
-    # WHY: all the branches above derive NEEDLE_AXIS_LOCAL by normalizing a
-    # POSITION vector (tip_inee_at_calib, i.e. "where is the tip relative to
-    # the EE origin"), which is what pivot/rcmoffset calibration actually
-    # solves for. That vector's direction is only a good proxy for the tool
-    # shaft's true physical long axis if the tool mounts perfectly on-axis
-    # with zero lateral offset -- an assumption never independently checked
-    # until tonight. measure_shaft_direction_3d()'s depth-camera 3D fit
-    # (vis3d_*, module docstring pt.4) is a genuinely independent measurement
-    # of the physical shaft direction that does NOT go through tip_inee_at_
-    # calib at all, so it can catch exactly this kind of error.
-    #
-    # EVIDENCE (see needle_axis_diagnose.py, run 2026-08-26 ~12:45): 5 rows in
-    # precision_log.csv had vis3d_ok=True + full ee_q*/vis3d_d* logged,
-    # spanning 2 azimuths (0deg, 45deg) and both ORIENT and REORIENT. One
-    # (2026-08-25T19:14:28, REORIENT az=0) was a clear outlier (84.8deg from
-    # the other 4 -- likely a sign-disambiguation flip or a RANSAC fit that
-    # barely passed the quality gate; DO NOT trust single vis3d_ok=True
-    # samples in isolation, only agreement ACROSS several). The remaining 4
-    # agreed with each other to within 13.2deg (much tighter than their
-    # ~20.6deg disagreement with the position-derived NEEDLE_AXIS_LOCAL
-    # above), so this override uses their mean:
-    #   NEEDLE_AXIS_MEASURED_20260826 = [-0.0757, 0.1164, -0.9903]
-    # This is a SMALL sample (n=4 after outlier removal) from ONE session --
-    # treat it as a working correction, not a final validated constant.
-    # Before trusting it for the paper, collect more vis3d_ok samples
-    # (ideally >=2 more azimuths) and re-run needle_axis_diagnose.py to
-    # confirm the cluster stays tight and the mean doesn't move much.
-    #
-    # Set NEEDLE_AXIS_OVERRIDE=0 to fall back to the position-derived axis
-    # above (e.g. to A/B compare achieved vis3d_err_deg with vs without this
-    # override).
-    NEEDLE_AXIS_MEASURED_20260826 = np.array([-0.0757, 0.1164, -0.9903])
-    if os.environ.get("NEEDLE_AXIS_OVERRIDE", "1") != "0":
-        _ang_vs_old = np.degrees(np.arccos(np.clip(
-            abs(np.dot(NEEDLE_AXIS_LOCAL, NEEDLE_AXIS_MEASURED_20260826)), 0, 1)))
-        print("  NEEDLE_AXIS_LOCAL OVERRIDDEN by independent-vision measurement "
-              "(needle_axis_diagnose.py, 2026-08-26, n=4 after 1 outlier excluded): "
-              "%s -> %s  (%.1fdeg correction; set NEEDLE_AXIS_OVERRIDE=0 to disable)" %
-              (np.round(NEEDLE_AXIS_LOCAL, 4), np.round(NEEDLE_AXIS_MEASURED_20260826, 4),
-               _ang_vs_old))
-        NEEDLE_AXIS_LOCAL = NEEDLE_AXIS_MEASURED_20260826
+    # Current independent axis only; no historical override or position-derived fallback.
+    from runtime_session import load_axis
+    NEEDLE_AXIS_LOCAL = load_axis(required=os.environ.get("ISMR_MODE") == "insertion")
 
     PHANTOM_NORMAL = load_phantom_normal(NORMAL_NPZ)
     if PHANTOM_NORMAL is not None:
@@ -5198,8 +5181,7 @@ def main():
           - a fresh (<=MIC_LIVE_MAX_AGE_S old), clean microscope still in
             MIC_LIVE_STILLS_DIR, same staleness gate 'y' already applies
         """
-        stale = [p for p in calib_freshness_problems()
-                 if not p.startswith("ring_to_entry_offset_circle MISSING")]
+        stale = calib_freshness_problems(phase="collect")
         if stale:
             S.msg = "0: REFUSED (stale calib): " + "; ".join(stale)
             print("  " + S.msg)
@@ -5247,6 +5229,8 @@ def main():
             return
 
         out = {
+            "mark0_theta_deg": float(np.degrees(np.arctan2(rec["mark0_cy"]-rec["plug_cy"], rec["mark0_cx"]-rec["plug_cx"]))) if rec.get("mark0_cx") is not None else None,
+            "mark0_radius_px": float(np.hypot(rec["mark0_cx"]-rec["plug_cx"], rec["mark0_cy"]-rec["plug_cy"])) if rec.get("mark0_cx") is not None else None,
             "timestamp": time.time(),
             "timestamp_iso": datetime.datetime.now().isoformat(),
             "ring_base_mm": _ring_live["smoothed"].tolist(),
@@ -5272,7 +5256,7 @@ def main():
             out["mark%d_base_mm" % i] = mark_bases.get(i)
 
         try:
-            dbg_dir = os.path.join(HERE, "ring_depth_debug")
+            dbg_dir = data_path("ring_depth_debug")
             os.makedirs(dbg_dir, exist_ok=True)
             dbg_path = os.path.join(dbg_dir, "ring_%d.npz" % int(out["timestamp"] * 1000))
             np.savez_compressed(dbg_path, color=_ring_live.get("last_color"),
@@ -6002,6 +5986,14 @@ def main():
         while not rospy.is_shutdown():
             k = grab_show()
             now = time.time()
+            if k in (ord('g'), ord('t'), ord('i'), ord('p')):
+                from runtime_session import motion_problems
+                _problems = motion_problems()
+                if _problems:
+                    zero()
+                    S.msg = "REFUSED: " + "; ".join(_problems)
+                    print(S.msg)
+                    continue
             if k == 255:
                 if now < jog["until"] and (jog["lin"] is not None or jog["ang"] is not None):
                     lv = jog["lin"] or (0, 0, 0)
@@ -6334,6 +6326,8 @@ def main():
                 if ok:
                     S.oriented = False  # new hover point -> any earlier in-place ORIENT is stale
             elif k == ord('t'):
+                if NEEDLE_AXIS_LOCAL is None:
+                    S.msg = "No current needle axis: collect independent shaft data first"; continue
                 if PHANTOM_NORMAL is None:
                     S.msg = "no phantom_normal.npz -- run phantom_normal_estimate.py first"; continue
                 if not _trial_state["normal_fresh"]:

@@ -1,0 +1,38 @@
+test_offline_cli_help (test_cli.CLITests.test_offline_cli_help) ... ok
+test_relocated_paths_fresh_cli_schema_accept_and_reject (test_cli.CLITests.test_relocated_paths_fresh_cli_schema_accept_and_reject) ... ok
+test_affine_registration_with_loo (test_offline.OfflineTests.test_affine_registration_with_loo) ... ok
+test_archiver_on_fresh_trial (test_offline.OfflineTests.test_archiver_on_fresh_trial) ... ok
+test_axis_fit_sign_and_loader (test_offline.OfflineTests.test_axis_fit_sign_and_loader) ... ok
+test_bad_axis_no_silent_outlier_removal (test_offline.OfflineTests.test_bad_axis_no_silent_outlier_removal) ... ok
+test_controller_geometry_unchanged (test_offline.OfflineTests.test_controller_geometry_unchanged) ... ok
+test_current_tip_guard_and_nan (test_offline.OfflineTests.test_current_tip_guard_and_nan) ... ok
+test_empty_calibration_bootstraps_without_models (test_offline.OfflineTests.test_empty_calibration_bootstraps_without_models) ... ok
+test_external_path_override_rejected (test_offline.OfflineTests.test_external_path_override_rejected) ... ok
+test_hash_and_dependency_change_rejected (test_offline.OfflineTests.test_hash_and_dependency_change_rejected) ... ok
+test_insertion_refuses_empty (test_offline.OfflineTests.test_insertion_refuses_empty) ... ok
+test_intrinsics_requires_measured_loo (test_offline.OfflineTests.test_intrinsics_requires_measured_loo) ... ok
+test_invalid_rotation_or_nan_rejected (test_offline.OfflineTests.test_invalid_rotation_or_nan_rejected) ... ok
+test_legacy_model_rejected (test_offline.OfflineTests.test_legacy_model_rejected) ... ok
+test_loto_and_trial_completeness (test_offline.OfflineTests.test_loto_and_trial_completeness) ... ok
+test_rcmoffset_fit_from_fresh_synthetic_poses (test_offline.OfflineTests.test_rcmoffset_fit_from_fresh_synthetic_poses) ... ok
+test_ring_first_collection_fixed_and_tangent (test_offline.OfflineTests.test_ring_first_collection_fixed_and_tangent) ... ok
+test_ring_fit_loo (test_offline.OfflineTests.test_ring_fit_loo) ... ok
+test_stop_and_stage_pivots_preserved (test_offline.OfflineTests.test_stop_and_stage_pivots_preserved) ... ok
+test_visual_correction_synthetic_new_magnitude (test_offline.OfflineTests.test_visual_correction_synthetic_new_magnitude) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 2.467s
+
+OK
+Origin correction: /Users/tobiichi-orieda/Documents/CIS-II/next step/ISMR_Integration/CISII_ISMR_Runnable_v1/data/sessions/UNINITIALIZED/calibration/origin_correction.npz not found -- using zero correction (press 'c' in the live window to measure one).
+[tip_inee_guard] OK: live TipInEE = [  1.   2. -20.] mm matches current-session model [  1.   2. -20.] mm (tol=0.50mm)
+
+=== mark0: 10 paired sample(s) ===
+  BASELINE (no correction): raw |ring - entry| RMS=3.742mm  (mean=3.742mm max=3.742mm) -- this is what 'z' alone gives you
+  offset = mean(entry - ring) = [2.000 3.000 1.000]mm  (std=[0.000 0.000 0.000]mm)
+  in-sample scatter around that mean: RMS=0.000mm max=0.000mm  (NOT an accuracy number -- see LOO below)
+  --- leave-one-out cross-validation (HONEST accuracy estimate) ---
+  LOO RMS error: 0.000mm  (mean=0.000mm std=0.000mm max=0.000mm)
+  bootstrap 95% CI on mean LOO error: [0.000, 0.000] mm  (n_resamples=2000)
+  --> this is what a future 'x'-key gate should check, NOT the in-sample scatter above.
+  CORRECTION HELPS: 3.742mm -> 0.000mm (100% reduction vs. raw ring lock)

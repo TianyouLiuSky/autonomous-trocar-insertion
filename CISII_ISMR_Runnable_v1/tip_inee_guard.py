@@ -83,11 +83,17 @@ it cannot translate the tip as a side effect of fitting the orientation
 shape. If you change the GUI Tip Offset again you MUST update this
 constant and tip_offset_rcmoffset.npz's tip_inee_at_calib to match.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import numpy as np
 import rospy
 from geometry_msgs.msg import Vector3
 
-CANONICAL_TIP_INEE = np.array([0.82968, -2.84431, -13.02703])
+CANONICAL_TIP_INEE = None  # Historical values are documentation only.
 DEFAULT_TOL_MM = 0.5
 
 
@@ -120,18 +126,24 @@ def read_live_tip_inee(timeout_s=3.0):
     return result["v"]
 
 
-def assert_tip_inee(expected=CANONICAL_TIP_INEE, tol_mm=DEFAULT_TOL_MM, context=""):
+def assert_tip_inee(expected=None, tol_mm=DEFAULT_TOL_MM, context=""):
     """Read the LIVE TipInEE and hard-abort (raise SystemExit) if it doesn't
     match `expected` within `tol_mm`. Call this at the top of any script
     whose numeric results (pivot d, precision_log entries, recorded demos)
     are only valid for a specific TipInEE. This is the single choke point
     that stops a silent GUI TipInEE change from silently corrupting data."""
+    from runtime_session import expected_tip
+    expected = expected_tip(expected)
+    if not np.isfinite(tol_mm) or tol_mm <= 0:
+        raise ValueError("positive finite TipInEE tolerance required")
     live = read_live_tip_inee()
+    if np.asarray(live).shape != (3,) or not np.isfinite(live).all():
+        raise SystemExit("Invalid live TipInEE")
     err = np.abs(live - np.asarray(expected))
     if np.any(err > tol_mm):
         raise SystemExit(
             "\n!!! TipInEE MISMATCH -- ABORTING%s !!!\n"
-            "  expected (canonical) = %s mm\n"
+            "  expected (current-session model) = %s mm\n"
             "  live GUI value       = %s mm\n"
             "  |diff|               = %s mm  (tol=%.2fmm)\n"
             "  Go set the GUI Tip Offset back to %s and do NOT touch it again,\n"
@@ -139,7 +151,7 @@ def assert_tip_inee(expected=CANONICAL_TIP_INEE, tol_mm=DEFAULT_TOL_MM, context=
             "  pivot_calibration.py against the new value before trusting any\n"
             "  tip position from this codebase.\n"
             % (" (%s)" % context if context else "", expected, live, err, tol_mm, expected))
-    print("[tip_inee_guard] OK: live TipInEE = %s mm matches canonical %s mm (tol=%.2fmm)"
+    print("[tip_inee_guard] OK: live TipInEE = %s mm matches current-session model %s mm (tol=%.2fmm)"
           % (live, expected, tol_mm))
     return live
 

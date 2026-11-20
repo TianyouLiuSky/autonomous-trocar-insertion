@@ -49,6 +49,12 @@ Reports:
 No ROS / robot / camera dependency -- pure JSONL analysis, safe to run
 anywhere once phantom_normal_samples.jsonl has been copied over.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import json
 import os
 import sys

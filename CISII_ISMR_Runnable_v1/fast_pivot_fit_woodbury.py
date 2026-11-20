@@ -44,6 +44,12 @@ home_to_rcm_insert_v2_precision.py's load_tip_offset_pivot() /
 load_tip_offset_pivot_augmented() expect.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys
@@ -171,9 +177,9 @@ def main():
     print("  best augmented LOO   = %.4f mm  (lambda=%s)" % (loo_best, lam_best))
 
     if save:
-        np.savez(os.path.join(HERE, "tip_offset_pivot.npz"),
+        np.savez(data_path("tip_offset_pivot.npz"),
                  d=d_base, fit_rms=base_loo, loo_rms=base_loo, n=n_total)
-        np.savez(os.path.join(HERE, "tip_offset_pivot_augmented.npz"),
+        np.savez(data_path("tip_offset_pivot_augmented.npz"),
                  d0=d0_best, C=C_best, R_mean=R_mean, lam=lam_best,
                  loo_rms_augmented=loo_best, loo_rms_baseline=base_loo,
                  d_baseline=d_base, n=n_total)

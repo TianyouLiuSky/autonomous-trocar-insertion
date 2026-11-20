@@ -47,6 +47,12 @@ framing, not just "mean and std"):
 Usage:
     python3 correspondence_report.py [path/to/correspondence_log.csv] [--no-plot]
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys

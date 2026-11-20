@@ -51,6 +51,12 @@ script does not re-run the click-fitting itself, it only does the
 ray-decomposition + save step.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import argparse
 import os
 import time
@@ -64,8 +70,8 @@ def main():
     ap.add_argument("vx", type=float)
     ap.add_argument("vy", type=float)
     ap.add_argument("vz", type=float)
-    ap.add_argument("--handeye", default="handeye_T.npz")
-    ap.add_argument("--out", default="origin_correction.npz")
+    ap.add_argument("--handeye", default=data_path("handeye_T.npz"))
+    ap.add_argument("--out", default=data_path("origin_correction.npz"))
     ap.add_argument("--source-note", default="")
     args = ap.parse_args()
 

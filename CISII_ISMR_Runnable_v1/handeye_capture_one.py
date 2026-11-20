@@ -14,6 +14,12 @@ released via 'q' before running this).
 Usage:
     python3 handeye_capture_one.py [out_csv]   # default: handeye_data/pairs_extra_rot.csv
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys
@@ -29,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from handeye_calibrate import detect_aruco  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_CSV = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "handeye_data", "pairs_extra_rot.csv")
+OUT_CSV = sys.argv[1] if len(sys.argv) > 1 else data_path("handeye_data", "pairs_extra_rot.csv")
 
 ee = {"p": None, "q": None}
 
@@ -60,7 +66,7 @@ cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 profile = pipe.start(cfg)
 align = rs.align(rs.stream.color)
-intr = profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
+intr = __import__("intr_util").load_best_intrinsics(profile)
 
 N = 12
 centers = []
@@ -97,7 +103,7 @@ for i in range(N + 8):
 pipe.stop()
 
 if len(centers) < 6:
-    cv2.imwrite(os.path.join(HERE, "handeye_capture_one_fail.png"), frame_last)
+    cv2.imwrite(data_path("handeye_capture_one_fail.png"), frame_last)
     raise SystemExit("only got %d/%d valid marker+depth frames -- marker not "
                       "reliably visible at this pose (saved last frame to "
                       "handeye_capture_one_fail.png for inspection)" % (len(centers), N))

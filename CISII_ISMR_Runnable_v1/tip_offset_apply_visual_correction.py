@@ -1,204 +1,63 @@
 #!/usr/bin/env python3
+"""Offline visual tool correction using fresh CSV, hand-eye, and Brown intrinsics.
+Preserves d_const/K. Output is a NEW model; operator must update GUI baseline
+and independently recheck before accepting it. HARDWARE_UNVERIFIED.
 """
-Apply the camera-validated tool-frame correction found by
-handeye_vs_tip_discriminate.py on top of the existing zero-mean rcmoffset
-tip model, WITHOUT re-deriving the orientation-dependent shape (d_const, K).
-
-Why only the constant shifts. The 2026-08-25 pinned-tip (CM_OFFSET_FINDER)
-calibration was done under a stiff FORCE-CONTROLLED hold while the operator
-rotated the tool -- see robotTask.cpp's CM_OFFSET_FINDER (from line 1906).
-A long thin needle held that way can deflect elastically under the reaction
-load, so the point the jig converges on is a loaded mechanical equilibrium,
-offset from the true unloaded geometric tip by a roughly constant vector in
-the TOOL frame. That is a bias in the MEAN offset, not in how it varies with
-orientation (q4) -- the K*[0,sin q4,cos q4] term is a differential measurement
-of the robot's own missing RCM2_1.RCMoffset kinematic parameter and is not
-expected to share this bias. So: keep d_const/K, shift only tip_inee_at_calib.
-
-Evidence this is real and not a fluke, from handeye_vs_tip_discriminate.py's
-click-based measurement (camera + human-judged true tip location, NOT
-vision-only, NOT camera-free pivot):
-    n=28 clicks, orientation spread=94.7 deg
-    as-is RMS=32.6 px  |  base-frame-constant fit RMS=10.0 px  |
-    tool-frame-constant fit RMS=3.6 px   (tool wins by 2.7x -> not hand-eye)
-    bootstrap (300 resamples) tool-frame delta std = (0.29, 0.20, 0.17) mm
-    -> resulting new baseline agrees with the operator's INDEPENDENT manual
-       GUI tuning (0.214, -2.0, -14.0) to 1.43 mm -- two independent methods
-       (least-squares click fit vs. human eyeball-across-rotation tuning)
-       converging on the same answer is the strongest evidence in this whole
-       debugging session.
-
-Run with no args; edit SRC_CSV / OLD_NPZ below if repeating this later with a
-fresh discriminator run.
-"""
-import os
-
+import argparse,csv,json
+from pathlib import Path
+import cv2
 import numpy as np
 from scipy.optimize import least_squares
+from scipy.spatial.transform import Rotation
+from runtime_session import data_path,digest,vector
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SRC_CSV = os.path.join(HERE, "handeye_vs_tip_20260825_180754.csv")
-LIVE_NPZ = os.path.join(HERE, "tip_offset_rcmoffset.npz")
-HANDEYE_NPZ = os.path.join(HERE, "handeye_T.npz")
-
-
-def quat_to_R(q):
-    x, y, z, w = q
-    return np.array([
-        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-    ], float)
-
+def fit_correction(csv_path,model,handeye,intrinsics):
+    with np.load(model,allow_pickle=False) as z:old={k:z[k] for k in z.files}
+    with np.load(handeye,allow_pickle=False) as z:rh=np.asarray(z['R'],float);th=np.asarray(z['t'],float).reshape(3)
+    with np.load(intrinsics,allow_pickle=False) as z:
+        k=np.array([[float(z['fx']),0,float(z['ppx'])],[0,float(z['fy']),float(z['ppy'])],[0,0,1.]])
+        dist=np.asarray(z['coeffs'],float).reshape(-1)
+    with open(csv_path) as source:
+        rows=list(csv.DictReader(source))
+    if len(rows)<8:raise ValueError('need >=8 diverse poses')
+    qs=np.array([[float(r['q'+c]) for c in 'xyzw'] for r in rows]);rots=Rotation.from_quat(qs);rs=rots.as_matrix()
+    spread=max((a.inv()*b).magnitude() for a in rots for b in rots)*180/np.pi
+    if spread<20:raise ValueError('need >=20 deg orientation diversity')
+    pos=np.array([[float(r['p'+c]) for c in 'xyz'] for r in rows]);click=np.array([[float(r['click_u']),float(r['click_v'])] for r in rows])
+    q4=np.arctan2(-rs[:,1,2],rs[:,1,1]);u=np.column_stack([np.zeros(len(rows)),np.sin(q4),np.cos(q4)])
+    pred=pos+np.einsum('nij,nj->ni',rs,vector(old['d_const'])+float(old['K'])*u)
+    def residual(delta,ids=None,frame='tool'):
+        corrected=pred+(np.einsum('nij,j->ni',rs,delta) if frame=='tool' else delta)
+        cam=(corrected-th)@rh
+        if np.any(cam[:,2]<=0):raise ValueError('projection behind camera')
+        uv=cv2.projectPoints(cam,np.zeros(3),np.zeros(3),k,dist)[0].reshape(-1,2)
+        e=uv-click
+        return (e if ids is None else e[ids]).ravel()
+    fit=least_squares(residual,np.zeros(3),xtol=1e-10,ftol=1e-10,gtol=1e-10)
+    base=least_squares(lambda d:residual(d,frame='base'),np.zeros(3))
+    if not fit.success or np.linalg.matrix_rank(fit.jac)<3:raise ValueError('ill-conditioned fit')
+    rms=lambda e:float(np.sqrt(np.mean(np.sum(e.reshape(-1,2)**2,axis=1))))
+    # Cross-validation refits on each training subset, never on held-out clicks.
+    held=np.zeros((len(rows),2))
+    for i in range(len(rows)):
+        ids=np.arange(len(rows))!=i
+        f=least_squares(lambda d:residual(d,ids),np.zeros(3))
+        held[i]=residual(f.x).reshape(-1,2)[i]
+    rng=np.random.RandomState(0);boots=[]
+    for _ in range(100):
+        idx=rng.randint(0,len(rows),len(rows));boots.append(least_squares(lambda d:residual(d,idx),fit.x).x)
+    report={'delta_mm':fit.x.tolist(),'sigma_mm':np.std(boots,axis=0).tolist(),'n':len(rows),'spread_deg':float(spread),'fit_rms_px':rms(fit.fun),'base_rms_px':rms(base.fun),'loo_rms_px':rms(held),'source_sha256':digest(csv_path)}
+    return old,report
 
 def main():
-    import csv
-    import pyrealsense2 as rs
-    from scipy.spatial.transform import Rotation as Rot
-
-    z_he = np.load(HANDEYE_NPZ)
-    R_he, t_he = np.asarray(z_he["R"], float), np.asarray(z_he["t"], float).ravel()
-
-    intr = rs.intrinsics()
-    intr.width, intr.height = 640, 480
-    intr.fx, intr.fy = 430.64, 430.28
-    intr.ppx, intr.ppy = 310.64, 245.56
-    intr.model = rs.distortion.inverse_brown_conrady
-    intr.coeffs = [0.0] * 5
-
-    z_old = np.load(LIVE_NPZ)
-    d_const = np.asarray(z_old["d_const"], float).ravel()
-    K = float(z_old["K"])
-    ubar = np.asarray(z_old["ubar"], float).ravel() if "ubar" in z_old.files else None
-    old_abar = np.asarray(z_old["tip_inee_at_calib"], float).ravel()
-
-    def q4_of(R):
-        return np.arctan2(-R[1, 2], R[1, 1])
-
-    def tip_offset_vec(R):
-        # NOTE: does NOT add old_abar. p (below) is FrameEE.translation, which
-        # firmware already computed via ComputeFwdKinsTip(joints, TipInEE_live)
-        # with TipInEE_live == old_abar (enforced by tip_inee_guard before this
-        # data was collected) -- old_abar is already baked into p. This must
-        # mirror handeye_vs_tip_discriminate.py's TipModel.tip() EXACTLY:
-        #     offset_base(R) = R.dot(d_const + K*[0,sin q4,cos q4])
-        #     tip(p, R)       = p + offset_base(R)
-        # An earlier version of this script wrongly added old_abar a second
-        # time here, which silently produced a corrupted tip_inee_at_calib
-        # (caught before it reached the GUI/firmware -- see git history for
-        # the wrong intermediate value and why it looked deceptively plausible).
-        q4 = q4_of(R)
-        return R.dot(d_const + K * np.array([0.0, np.sin(q4), np.cos(q4)]))
-
-    rows = []
-    with open(SRC_CSV) as f:
-        for r in csv.DictReader(f):
-            p = np.array([float(r["px"]), float(r["py"]), float(r["pz"])])
-            q = np.array([float(r["qx"]), float(r["qy"]), float(r["qz"]), float(r["qw"])])
-            click = np.array([float(r["click_u"]), float(r["click_v"])])
-            R = quat_to_R(q)
-            rows.append({"R": R, "tip_pred": p + tip_offset_vec(R), "click": click})
-    n = len(rows)
-
-    def base_to_pixel(p_base):
-        c = R_he.T.dot(p_base - t_he)
-        u, v = rs.rs2_project_point_to_pixel(intr, [float(c[0]), float(c[1]), float(c[2])])
-        return np.array([u, v], float)
-
-    def resid(x):
-        return np.concatenate([base_to_pixel(s["tip_pred"] + s["R"].dot(x)) - s["click"]
-                               for s in rows])
-
-    fit = least_squares(resid, np.zeros(3), diff_step=1e-2, xtol=1e-10, ftol=1e-10, gtol=1e-10)
-    delta = fit.x
-    rms = float(np.sqrt((fit.fun ** 2).reshape(-1, 2).sum(axis=1).mean()))
-    print("n=%d  tool-frame delta = %s  |.|=%.3f mm  fit RMS=%.2f px"
-          % (n, np.round(delta, 4), np.linalg.norm(delta), rms))
-
-    # Cross-check against handeye_vs_tip_discriminate.py's OWN TipModel/fit_models
-    # (independent code path) before trusting this number for anything that
-    # touches the GUI/firmware.
-    disc_src = open(os.path.join(HERE, "handeye_vs_tip_discriminate.py")).read()
-    disc_head = disc_src.split("def main()")[0]
-    for a in ("import rospy", "from geometry_msgs.msg import Transform, Vector3",
-              "from tip_inee_guard import assert_tip_inee  # noqa: E402"):
-        disc_head = disc_head.replace(a, "")
-    DM = {"__file__": os.path.join(HERE, "handeye_vs_tip_discriminate.py")}
-    exec(compile(disc_head, "discriminator_module", "exec"), DM)
-    disc_rows = []
-    with open(SRC_CSV) as f:
-        for r in csv.DictReader(f):
-            p = np.array([float(r["px"]), float(r["py"]), float(r["pz"])])
-            q = np.array([float(r["qx"]), float(r["qy"]), float(r["qz"]), float(r["qw"])])
-            click = np.array([float(r["click_u"]), float(r["click_v"])])
-            R = DM["quat_to_R"](q)
-            disc_rows.append({"R": R, "tip_pred": p + R.dot(d_const + K * np.array(
-                [0.0, np.sin(np.arctan2(-R[1, 2], R[1, 1])),
-                 np.cos(np.arctan2(-R[1, 2], R[1, 1]))])), "click": click})
-    disc_res, _ = DM["fit_models"](disc_rows, R_he, t_he, intr)
-    cross_delta = disc_res["tool"]["vec"]
-    agree = np.linalg.norm(cross_delta - delta)
-    print("cross-check via discriminator's own fit_models(): delta=%s  |diff from above|=%.4f mm"
-          % (np.round(cross_delta, 4), agree))
-    if agree > 0.05:
-        raise SystemExit("ABORT: the two independent computations of the tool-frame "
-                         "delta disagree by %.3f mm -- refusing to save. Investigate "
-                         "before touching tip_offset_rcmoffset.npz." % agree)
-    print("cross-check OK (agree to %.4f mm) -- proceeding to save." % agree)
-
-    rng = np.random.RandomState(0)
-    boots = []
-    for _ in range(500):
-        idx = rng.randint(0, n, n)
-        sub = [rows[i] for i in idx]
-        rb = least_squares(lambda x: np.concatenate(
-            [base_to_pixel(s["tip_pred"] + s["R"].dot(x)) - s["click"] for s in sub]),
-            np.zeros(3), diff_step=1e-2, xtol=1e-10, ftol=1e-10, gtol=1e-10)
-        boots.append(rb.x)
-    boots = np.array(boots)
-    sigma = boots.std(axis=0)
-    print("bootstrap std (n=500) = %s mm" % np.round(sigma, 3))
-
-    new_abar = old_abar + delta
-    print("\nold Abar = %s" % np.round(old_abar, 5))
-    print("new Abar = %s   (GUI Tip Offset must be set to this)" % np.round(new_abar, 5))
-
-    # Sanity bound: the correction should be a plausible pivot-rig bias
-    # (mm-scale, tip-frame Z should stay negative/shaft-like), not a sign flip
-    # or a value that would put the "tip" behind the EE origin.
-    if new_abar[2] >= 0 or abs(np.linalg.norm(delta) - 9.4) > 3.0:
-        raise SystemExit("ABORT: new Abar=%s / |delta|=%.2f mm looks physically "
-                         "implausible -- refusing to save." % (new_abar, np.linalg.norm(delta)))
-
-    import shutil
-    import datetime
-    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    bak = os.path.join(HERE, "tip_offset_rcmoffset_prev_%s.npz" % stamp)
-    shutil.copy2(LIVE_NPZ, bak)
-    print("backed up previous -> %s" % bak)
-
-    np.savez(
-        LIVE_NPZ,
-        d_const=d_const,
-        K=np.array([K]),
-        tip_inee_at_calib=new_abar,
-        ubar=ubar if ubar is not None else np.zeros(3),
-        loo_rms_mm=z_old["loo_rms_mm"] if "loo_rms_mm" in z_old.files else np.array([np.nan]),
-        loo_rms_rigid_mm=z_old["loo_rms_rigid_mm"] if "loo_rms_rigid_mm" in z_old.files else np.array([np.nan]),
-        visual_correction_mm=delta,
-        visual_correction_sigma_mm=sigma,
-        visual_correction_n=np.array([n]),
-        visual_correction_spread_deg=np.array([94.7]),
-        visual_correction_rms_px=np.array([rms]),
-        visual_correction_source_csv=os.path.basename(SRC_CSV),
-        visual_correction_note=np.array(
-            "pivot (CM_OFFSET_FINDER) baseline biased ~9.4mm vs true optical tip, "
-            "likely elastic needle flex under force-controlled hold; corrected via "
-            "handeye_vs_tip_discriminate.py click-based fit, n=28, spread=94.7deg; "
-            "agrees with operator's independent manual GUI tuning to 1.43mm"),
-    )
-    print("saved -> %s" % LIVE_NPZ)
-
-
-if __name__ == "__main__":
-    main()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--csv',required=True);p.add_argument('--model',default=data_path('tip_offset_rcmoffset.npz'));p.add_argument('--handeye',default=data_path('handeye_T.npz'));p.add_argument('--intrinsics',default=data_path('cam_intrinsics.npz'));p.add_argument('--out',required=True);p.add_argument('--max-correction-mm',required=True,type=float);p.add_argument('--max-rms-px',required=True,type=float);p.add_argument('--max-sigma-mm',required=True,type=float);a=p.parse_args()
+    if Path(a.out).resolve()==Path(a.model).resolve():raise SystemExit('Output must differ from input; review before promotion')
+    if any(not np.isfinite(v) or v<=0 for v in (a.max_correction_mm,a.max_rms_px,a.max_sigma_mm)):raise SystemExit('positive finite limits required')
+    old,r=fit_correction(a.csv,a.model,a.handeye,a.intrinsics);print(json.dumps(r,indent=2))
+    delta=vector(r['delta_mm'])
+    if np.linalg.norm(delta)>a.max_correction_mm or r['loo_rms_px']>a.max_rms_px or max(r['sigma_mm'])>a.max_sigma_mm:raise SystemExit('Measured correction fails configured physical/uncertainty limits')
+    if r['fit_rms_px']>=r['base_rms_px']:raise SystemExit('Tool-frame cause not supported; investigate hand-eye/origin first')
+    old.update(tip_inee_at_calib=vector(old['tip_inee_at_calib'])+delta,visual_correction_mm=delta,visual_correction_sigma_mm=r['sigma_mm'],visual_correction_n=r['n'],visual_correction_spread_deg=r['spread_deg'],visual_correction_rms_px=r['fit_rms_px'],visual_correction_loo_rms_px=r['loo_rms_px'],visual_correction_source_sha256=r['source_sha256'])
+    np.savez(a.out,**old);Path(a.out+'.report.json').write_text(json.dumps(r,indent=2))
+    print('New GUI TipInEE (mm):',old['tip_inee_at_calib']);print('Independently verify, then promote and reaccept downstream registrations.')
+if __name__=='__main__':main()

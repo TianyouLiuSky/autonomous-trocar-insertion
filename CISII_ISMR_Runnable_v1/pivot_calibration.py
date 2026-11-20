@@ -77,6 +77,12 @@ terminal (NOT OffsetFinder mode):
   python3 pivot_calibration.py
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import sys
 import csv as _csv
@@ -92,10 +98,10 @@ from scipy.spatial.transform import Rotation as Rot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMEEE_TOPIC = os.environ.get("FRAMEEE_TOPIC", "/SHER21/eye_robot/FrameEE")
-OUT_NPZ = os.path.join(HERE, "tip_offset_pivot.npz")
-CSV_PATH = os.path.join(HERE, "pivot_samples.csv")
-OLD_TIP_OFFSET_NPZ = os.path.join(HERE, "tip_offset.npz")
-OLD_TIP_CLICK_CSV = os.path.join(HERE, "tip_click_samples.csv")
+OUT_NPZ = data_path("tip_offset_pivot.npz")
+CSV_PATH = data_path("pivot_samples.csv")
+OLD_TIP_OFFSET_NPZ = data_path("tip_offset.npz")
+OLD_TIP_CLICK_CSV = data_path("tip_click_samples.csv")
 
 BURST_N = int(os.environ.get("PIVOT_BURST_N", "30"))          # samples per capture (~0.3s @100Hz)
 BURST_HZ = float(os.environ.get("PIVOT_BURST_HZ", "100.0"))

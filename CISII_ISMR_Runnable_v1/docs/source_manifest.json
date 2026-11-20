@@ -4,283 +4,406 @@
     "source_url": "https://drive.google.com/file/d/1wA51a-BnLMAGx9fRWnN3HwCTZ3jhvMzf/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.730Z",
     "sha256_original": "a3cb764a1e4629aa4c5e2a1b2ebaecf1005cd4d7f9d1bc6462b737928f4e25f2",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "fd6edc441e59c4a082e47adec6dea41d4763061198c6e56c8c26a8ef23253f6e",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "trial_archiver.py",
     "source_url": "https://drive.google.com/file/d/1WWiuwsq45DWrH3sicIEcmCD-2yXcbMkP/view?usp=drivesdk",
     "source_modified": "2026-10-12T22:25:03.325Z",
     "sha256_original": "2b80b8e62aa6ec46d9cb365439d60c0968c6758d21f2afb9004338d6e1169dbb",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "a548cce929265806849814fdb049c97cd7fd109e62b27a15f1a2b1118cd4ed69",
+    "merge_reason": "改会话路径，哈希实际运行参数/源码/会话，新增SHA256并处理空CSV。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "home_to_rcm_insert_v2_precision.py",
     "source_url": "https://drive.google.com/file/d/1aVWXzB6VLVBu7VoSp-UWNqvNhjiBn2ZS/view?usp=drivesdk",
     "source_modified": "2026-10-12T22:17:10.618Z",
     "sha256_original": "cd87e5691caf2599a0cb0f0c076d5a0b626845470bea2233077041ba08c0c774",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "a7a8619019f6f3ecf189a675c42119282ce78eee89dd80b37416b2148572406b",
+    "merge_reason": "保留控制核心；新轴加载、collect/use依赖、会话gate、路径及新fiducial几何；HUD明确串行动作。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "origin_correction_from_discrim_csv.py",
     "source_url": "https://drive.google.com/file/d/1qevPUA_tYTXsA1-czgn8FR4T8kOcFHXC/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:50:17.903Z",
     "sha256_original": "39ceec72d1cbc59fc25def481e1bf158b12d217f13ac40aae071b0c7350f9f53",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "57efdf02ad842cf8860c112cce02b7f98c1d01fb50a308edc53b4a8fb1c8237f",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "jog_only.py",
     "source_url": "https://drive.google.com/file/d/1Zi3fpmivv1XvXepJRJomB0y1UcfW1CS3/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.730Z",
     "sha256_original": "74632f5243a8296403842f5a9e4881cf8538193e94104ef0099880d02126bb36",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "5d593e2d414e615b66afa721f65e741cea97ff2874657733bce9e18175bbc09e",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "pivot_residual_fit.py",
     "source_url": "https://drive.google.com/file/d/1KQhRk6A-OR6HxrJMWgfaIB3GityVrhc-/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.734Z",
     "sha256_original": "82ca0440cbb21f5a653b48678acf02f9cdba51f12a22e5eda041dcc45b0a54eb",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "f445007b6c56fb386e90eb58c1267bb278ad931b794ef7ac115775f71a23bad8",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "intr_util.py",
     "source_url": "https://drive.google.com/file/d/1lRKdeC1t4xkmG29Dmr94fsMQ_aflNIBe/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.742Z",
     "sha256_original": "58aae6ce0639b4cf8f05e9e436e5c89cc70a920d20dbfd0f7803cafe33695f35",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "6f9eeef144ba6104766bdac7f95687cf0f5add5e208714cfbfd3073496007f5d",
+    "merge_reason": "会话内参；拒绝缺失/坏schema及静默factory回退，OpenCV Brown畸变约定。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "measure_trial_holes.py",
     "source_url": "https://drive.google.com/file/d/1klxT38CcSEd8SvfTvce0Kg9T290_Ep9q/view?usp=drivesdk",
     "source_modified": "2026-10-12T19:40:16.772Z",
     "sha256_original": "b505c5655d19b85b9fc31560025184358b2a3c81fed9709f5b4dddc0991242a1",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "1372b261445ffbd43246e17ade818387d416dabe0467a78587225def80ce1fb7",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "pivot_calibration.py",
     "source_url": "https://drive.google.com/file/d/108_1p1NdN-kqkIrJO0-q0kCHU13YQIlH/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.734Z",
     "sha256_original": "720da2d8767835146b834282200da8eaacf8c3a5b26950326293c23d80764222",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "52528b16a7ec8701aad9d25ef39a00c447144192012547a7220d7f20a2b05b88",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "MIC_INDEPENDENT_VERIFICATION_PROTOCOL.md",
     "source_url": "https://docs.google.com/document/d/1yz6Y6G0V1iVpwgh6C8XFekL_Fermx5yu/edit?usp=drivesdk&ouid=111607941170491199351&rtpof=true&sd=true",
     "source_modified": "2026-10-11T17:29:11.425Z",
     "sha256_original": "96955afce575b06bf68c7c5047d17af9c099019cb9c5806a9015024b5ea0f1f3",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "96955afce575b06bf68c7c5047d17af9c099019cb9c5806a9015024b5ea0f1f3",
+    "merge_reason": "历史环境/验证说明；不作为本次已验证结果。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "fast_pivot_fit_woodbury.py",
     "source_url": "https://drive.google.com/file/d/1BkTIE83-8jsReZp8ljVs1Ro4kOp5_F2j/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:41.718Z",
     "sha256_original": "7f3b2233880f20d93008bc72b426c438d7d36067ad7d92a4ef6a5dcd29b46417",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "e7f042c665cf625c1c7336d8764659e4a5c3757ec2061d6dbcc678fb2b9f990f",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "tip_inee_guard.py",
     "source_url": "https://drive.google.com/file/d/1Kbk12t6EU9dzUNVXPSssQVNKz-tUxOr7/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.738Z",
     "sha256_original": "c21088c3a98d8b27e4a3eb3b8565393f83116f781d1950639e40fd2e37ee498c",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "a37ad82562b979d8789141fae5cd453fe9ddb52a9d59e3ebbfcc1ea686a02f51",
+    "merge_reason": "移除旧canonical默认，当前模型/显式会话基线核对，拒绝非有限值。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "README.md",
     "source_url": "https://docs.google.com/document/d/1Z3he9SE_nFY63Usnq7ePpqBUBWeFDZEX/edit?usp=drivesdk&ouid=111607941170491199351&rtpof=true&sd=true",
     "source_modified": "2026-10-11T17:29:11.713Z",
     "sha256_original": "5bf3296c0055dcf1a09fb9f6af8f3e3e9c5c36f8bb65b83d2c4e31fdf7bdeeab",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "84744c0967bc4be94dab36aadac070bb63228971627eda515d5f8a2506f96be6",
+    "merge_reason": "新版操作入口；原文逐字节保留在docs/ORIGINAL_README.md。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "run_main.sh",
     "source_url": "https://drive.google.com/file/d/1zqWILmCz1516bBEWijoR0Zl6--bc13RS/view?usp=drivesdk",
     "source_modified": "2026-10-12T21:42:48.694Z",
     "sha256_original": "c22492bac38644897525f12619df7892d007fa850f4d94dbce3bc85a8fcf2005",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "d66b1af2e90a04fc351688854450371a0bf407e19bd5483fd6631c1a244c1336",
+    "merge_reason": "保留角度表/速度/模式；ROS路径由环境指定，加入分阶段preflight和帮助。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "tip_pin_check_v3_fullpose.py",
     "source_url": "https://drive.google.com/file/d/1PcDfGQQkddLQE-tWwV2Fe61hQYfFCuTh/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.738Z",
     "sha256_original": "385d8f4fb38994257ee068025534cdf84da223736f965f03ce6a71614bada28f",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "b3cdaca06380bd9d9108698a199de83e28d2c22ea173ea173e5d91584fca9d27",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "handeye_vs_tip_discriminate.py",
     "source_url": "https://drive.google.com/file/d/1TEcAKRfid63TaD_4J6AG2EhaUzilNKgs/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.734Z",
     "sha256_original": "6b0c6d4f2cdb9fa347f26ef5ea5b3152b036bb95353782c1c2c75513b7e914b0",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "65edcb04de952f2f6cdaa99e990212901a587ec1f22e069c793349f719dfe479",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "DECKLINK_SETUP.md",
     "source_url": "https://docs.google.com/document/d/1TM55vTCrSjhKIDwsbrSk_VyNf_lREzXz/edit?usp=drivesdk&ouid=111607941170491199351&rtpof=true&sd=true",
     "source_modified": "2026-09-22T19:05:27.988Z",
     "sha256_original": "cd211db878e3365e4fa1eaa238e5a5d5fbf4fa6a6afd0cb504c9fbd5255a4c87",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "cd211db878e3365e4fa1eaa238e5a5d5fbf4fa6a6afd0cb504c9fbd5255a4c87",
+    "merge_reason": "历史环境/验证说明；不作为本次已验证结果。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "save_manual_still.py",
     "source_url": "https://drive.google.com/file/d/1Jz67WCjIF3cK2elMjlI6r9n7ZWBnBF-o/view?usp=drivesdk",
     "source_modified": "2026-10-12T19:40:02.843Z",
     "sha256_original": "a20123d903a1ffe11e0d0d7270965ca585a814f3e797dc499544c73dc2a98d6b",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "c48a1c641b8fdebca1d631c37ab47899dd9a5c21f474c9abf04ff4a21fab3a7f",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "rcmoffset_fit.py",
     "source_url": "https://drive.google.com/file/d/1WHkAqGZBKrdEymGI2k5whidabIyP5uJy/view?usp=drivesdk",
     "source_modified": "2026-09-21T21:49:04.738Z",
     "sha256_original": "500b4066da5b2d2e691d4f1c93f7741caad53daee6f0eb8a1b0fe1f15549c848",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "7ec7e96a91e3f959ac7831db727c7d7bf7a20c1ece03609562ba5b9fe28ee316",
+    "merge_reason": "保留拟合；显式本会话TipInEE stamp，禁止NaN provenance。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "handeye_calibrate.py",
     "source_url": "https://drive.google.com/file/d/1d3-5MUqCCmx6VpKZZw7HB-4CN6Ll5JBU/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:11.909Z",
     "sha256_original": "112b949c5720dd27307267ec54f52deb8577e78cfaf7985154c8366ae847d7c6",
-    "group": 0
+    "group": 0,
+    "sha256_integrated": "41dde847cdeff36c865ca08a5bd00fc272696f2dde6a5185074c92cd9306bef6",
+    "merge_reason": "保留采集/求解，改为与主程序一致的本次内参和相对输出。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/mic_extrinsic_calib.py",
     "source_url": "https://drive.google.com/file/d/1MG7eMbEXztWH73WxRrpX2sBKJUnCdTYn/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:11.273Z",
     "sha256_original": "4100dfb7bc8f42113d6a135ff6f35a3dbc3608723055ac083536da49605b9d10",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "00c35c1aad3655da90373b55226cf977107923b434d036f19f3229080966a5f4",
+    "merge_reason": "保持仿射/LOO算法，修正会话路径与CLI输出默认。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/click_calib_points_per_touch.py",
     "source_url": "https://drive.google.com/file/d/1GgH8QB0KAKAXTmCNo3m_6XmxPlqggKQm/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:12.213Z",
     "sha256_original": "93f71933b072fc891b0852879c225306c1a063ce0952d95dbed383394d3ecd8a",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "17d3c0f60828862f547cf5251feb853a9dfe0de3d50cbdadb42a36aa2087bf8a",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/correspondence_report.py",
     "source_url": "https://drive.google.com/file/d/1-Ng3pPwnKZhy9tJqOCvG6VSAOOUUJvHd/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:12.405Z",
     "sha256_original": "da14927c5015cb51ef9c2a6e85e76066b83c35363c73c164cf2bf7c62c4a8ef6",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "7cf9f2d75e22f1ae380b2f1d9e5dbcd3bbb1302499d50bd0f7951a77bdac5990",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/mic_independent_verify.py",
     "source_url": "https://drive.google.com/file/d/1ZDs_7abobDm7dWLRaAtIT6PqDU2_YXPC/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:11.353Z",
     "sha256_original": "3d244f889457a9f1ef60754c7ee1bcdc89ae197f1a44106b5d14deb019cc7c17",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "9b36113fef988ecd1dcea832259707d1d55af334f0f70e52491b4cb8d76d9a65",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/mic_live_capture.py",
     "source_url": "https://drive.google.com/file/d/1QPgeUZ2dbn7-npUiRdR8h0mMhRgPGDOk/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:11.065Z",
     "sha256_original": "3b59b9dfaa87a939439197fe8448603a2437adbe38e8363cf82bc58b3af4ea67",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "f54b8cce8ccbee12cb27cb9edef4ffda004cc23f3b5080a69f4f1a67636044eb",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/mic_perception.py",
     "source_url": "https://drive.google.com/file/d/17UN1iHOWZ5kNdoOQoSeZiPWF_XoTIJIx/view?usp=drivesdk",
     "source_modified": "2026-10-12T19:45:52.535Z",
     "sha256_original": "f08502e7017455959f4b026fe220b8f3eeb74328fe3a4aa8c4129e407265cf65",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "290c50fb79f3162a852b89ee224763140fce42a97bd7a7a03d8f41006efd7744",
+    "merge_reason": "只加会话导入路径；视觉算法保持原样。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/mic_ring_offset_verify.py",
     "source_url": "https://drive.google.com/file/d/1g0Zre7slZNLEoxre1w_56HNFpLSTb7bH/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:11.641Z",
     "sha256_original": "328e14adeaff46a8ded17158fd23a281f41b05d5f29e8ffea76732d50ca5c37c",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "2be209b1def453764ef58f31833f5eccb711252ffc8b0956b6a06d5d4e4de519",
+    "merge_reason": "保留偏移拟合；输出新mark0极坐标与双fiducial训练yaw。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/mic_live_capture_ros.py",
     "source_url": "https://drive.google.com/file/d/1ylIO51iEfLLYKgfYVY0V4nMjjW4H9Wfb/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:10.969Z",
     "sha256_original": "6ff4ee96586d8e6371a8fce53e5aec8f3cb1510a764efae3162efaa15381a668",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "982a420acb22e4ea33df6441fb1a9c4e8c3fb6e4510e513318539edd09b94e37",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/click_calib_points.py",
     "source_url": "https://drive.google.com/file/d/1P-iAPDaFcClZPdZ8J5lq-vMHqDgipvKs/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:11.221Z",
     "sha256_original": "375e169939bd9a79d117e2f683da64cf8613217c2071f97e23d306d3128bb91f",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "15b2fc5051a67b427bbd3d841a795e7b16f7dceee7f25f5f18e7269aca1b9e2c",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "microscope_autonomy/phantom_normal_repeatability.py",
     "source_url": "https://drive.google.com/file/d/12zr7k4k6kO4Nq4nMrLjAspJZjuZ-zNmQ/view?usp=drivesdk",
     "source_modified": "2026-10-11T17:29:12.333Z",
     "sha256_original": "dd55327d37a5c5587a3888eb17d601801d522131154fb34ca23e532ff2b16fc7",
-    "group": 1
+    "group": 1,
+    "sha256_integrated": "36bd178f6794f506af2c0fc0a2086c1485602de3866f6263951826c3556d78fc",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": true
   },
   {
     "file": "camera_intrinsics_calibrate_charuco.py",
     "source_url": "https://drive.google.com/file/d/1KXKidACDzwMCuoEAn-HgarHlrpposvQg/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:40:52.754Z",
     "sha256_original": "0dcca3c58b14e1b14ecff38fe10c58571ed61e8669a7107c34848ccc42746508",
-    "group": 2
+    "group": 2,
+    "sha256_integrated": "8d17a7c0ae775525dfa586d34a563256e7b9eb427927e54d6b5dd1bef4ddc763",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "camera_intrinsics_calibrate.py",
     "source_url": "https://drive.google.com/file/d/1Zj7oOwisLQLEZviETSn4FqJ0ycQFkCkq/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:40:52.754Z",
     "sha256_original": "ab20c9d6dbe7fb458e12c5e02b495243abc3c6f5efd5fa627d60833a0efde488",
-    "group": 2
+    "group": 2,
+    "sha256_integrated": "7ff5e68c4dc7fca597d2cf15235b202be093b64777f87e609cdbc60be7db6609",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "split_pairs_holdout.py",
     "source_url": "https://drive.google.com/file/d/1YHWAT5Docm8ztPp6TmmrP2ezQNdbw4_A/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:40:52.754Z",
     "sha256_original": "bfd5ef8ca8dac1eb56fe27d24f0258fd6da0fb3fcdfcabc3931de4df5e092c07",
-    "group": 2
+    "group": 2,
+    "sha256_integrated": "923ac938a0a987450f1afcf2252a48e266c7ec990119e5778809d00a26b73168",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "handeye_compare_on_val.py",
     "source_url": "https://drive.google.com/file/d/1dWCklRGhma378-SOKidVIF48Ombtdr8a/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:40:52.754Z",
     "sha256_original": "621f52dd0ac83f7c0cedb336957fc21b4379eb77119688007c3f951e2ffff6c2",
-    "group": 2
+    "group": 2,
+    "sha256_integrated": "62527b51898428f87bad9b1f1a176dfbd887fd82668e1a288231f101aed1f92a",
+    "merge_reason": "导入不启动相机；main显式执行，使用本次内参。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "handeye_live_recheck.py",
     "source_url": "https://drive.google.com/file/d/1PHuY58gwGmL4Ca1rg0r1t2BLQuVCx6ld/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:40:52.754Z",
     "sha256_original": "c5cf067efa9d81967bfed850c6784b77ac66971f19c052b947b273a17b1c4eb6",
-    "group": 2
+    "group": 2,
+    "sha256_integrated": "293db87784882d560e0ae4531bbf25ac1fce82dedb2fea9f300752c1c5047fdf",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "handeye_reproj_refine.py",
     "source_url": "https://drive.google.com/file/d/14vi7-qhdMo0UQNCEXSLi4SyoFL6XwiSG/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:40:52.754Z",
     "sha256_original": "96428e08e49e1d1caf784173d5834f3c7589719161a1ce3ab22b75be16f111d2",
-    "group": 2
+    "group": 2,
+    "sha256_integrated": "c7f6e63202b5e4c08e7049093150095a8ec6190e0b1dfa785e11a6dc7fcac53c",
+    "merge_reason": "会话路径、拒绝缺内参fallback、Brown约定；不自动纳入主标定流程。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "pivot_visual_crosscheck.py",
     "source_url": "https://drive.google.com/file/d/1ytG-sVd9tjOLWwc6ZKTkexIabPZswDOL/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:41:37.551Z",
     "sha256_original": "9fc70aec28a8efd9d7df7fe165a2631e573665b1fd95df886d8231bc3e83648b",
-    "group": 3
+    "group": 3,
+    "sha256_integrated": "ac0c4b5b156f483992f288a0c79c8cbe6be97a18373ad4e8de23399c87aa9c25",
+    "merge_reason": "保留源算法，统一会话数据位置及导入路径。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "pivot_capture_one.py",
     "source_url": "https://drive.google.com/file/d/1Uga0YyOFaBjqA4Jk51HOJzMTIpWmGcNL/view?usp=drivesdk",
     "source_modified": "2026-08-25T23:41:37.551Z",
     "sha256_original": "b627d8ba85ab1942d0498084d886615b1485d80bf0b7b8e413c9c05eef6aa28a",
-    "group": 3
+    "group": 3,
+    "sha256_integrated": "abd7123a8f1046d031db2ce9283206e7971d2f7ab82643e986c9d0b149d18050",
+    "merge_reason": "补齐单次采样并增加本次TipInEE guard。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "needle_axis_diagnose.py",
     "source_url": "CISII_CODEX_TRANSFER_BUNDLE.zip/source_snapshot/needle_axis_diagnose.py",
     "sha256_original": "9cc362667d9c4f7cc6d5710591449bdbf154d360991d5140abd523d572b7de6f",
-    "group": "attachment"
+    "group": "attachment",
+    "sha256_integrated": "4a2d6a300463d82023bdd95b33cdee735a86ba80345c89178509ae3f57451371",
+    "merge_reason": "保留历史诊断；新有效轴由needle_axis_calibrate生成。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "tip_offset_apply_visual_correction.py",
     "source_url": "CISII_CODEX_TRANSFER_BUNDLE.zip/source_snapshot/tip_offset_apply_visual_correction.py",
     "sha256_original": "cbaaba060275c76dc56649eef2e69d05b4d4635bc5776a1dc2b58fdd43e9e9c6",
-    "group": "attachment"
+    "group": "attachment",
+    "sha256_integrated": "2ef86d577c4a188913d4af60bed6ddf102a5e26563289cd528d0f17cc7341f66",
+    "merge_reason": "重写为显式CSV/当前内参、新候选输出、LOO/bootstrap/限值，不用旧9.4mm假设。",
+    "local_snapshot_matches_original": null
   },
   {
     "file": "rcm_definition.py",
     "source_url": "CISII_CODEX_TRANSFER_BUNDLE.zip/source_snapshot/rcm_definition.py",
     "sha256_original": "b25176466a8cc52be2be92202079fdffc5a4cbf97efbd88a8137f64d3c7e3430",
-    "group": "attachment"
+    "group": "attachment",
+    "sha256_integrated": "01b3fba557632efda231447844dfe34fe02004501f8be6bd68bc48019ff8f8e6",
+    "merge_reason": "修正ORIENT绕hover tip说明；保留独立几何示例。",
+    "local_snapshot_matches_original": null
   }
 ]

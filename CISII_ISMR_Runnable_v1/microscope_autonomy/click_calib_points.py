@@ -33,6 +33,12 @@ robot are clearly visible and NOT occluded by the instrument/speculum
 in EXACTLY the same order/labels you touched them on the robot with the
 '1'-'8' keys.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import sys
 import os
 import json

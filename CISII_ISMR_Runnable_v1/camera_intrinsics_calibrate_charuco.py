@@ -87,6 +87,12 @@ Output:
      code (handeye scripts, home_to_rcm_insert*.py) does not need to change.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import glob
 import os
 import pickle
@@ -96,9 +102,9 @@ import numpy as np
 import pyrealsense2 as rs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_NPZ = os.path.join(HERE, "cam_intrinsics.npz")
-PREV_NPZ = os.path.join(HERE, "cam_intrinsics_prev.npz")
-SESSION_DIR = os.environ.get("SESSION_DIR", os.path.join(HERE, "captures_session"))
+OUT_NPZ = data_path("cam_intrinsics.npz")
+PREV_NPZ = data_path("cam_intrinsics_prev.npz")
+SESSION_DIR = os.environ.get("SESSION_DIR", data_path("captures_session"))
 
 SQUARES_X = int(os.environ.get("CHARUCO_SQUARES_X", "6"))
 SQUARES_Y = int(os.environ.get("CHARUCO_SQUARES_Y", "6"))
@@ -361,7 +367,7 @@ def solve_and_save(captures, w, h):
         np.savez(PREV_NPZ, **{k: old[k] for k in old.files})
         print("  backed up existing cam_intrinsics.npz -> %s" % PREV_NPZ)
 
-    np.savez(OUT_NPZ, fx=fx, fy=fy, ppx=ppx, ppy=ppy,
+    np.savez(OUT_NPZ, distortion_model="brown_conrady", fx=fx, fy=fy, ppx=ppx, ppy=ppy,
              coeffs=dist.ravel()[:5], width=w, height=h,
              fit_rms_px=rms, loo_rms_px=loo_rms, n=n)
     print("  SAVED -> %s" % OUT_NPZ)

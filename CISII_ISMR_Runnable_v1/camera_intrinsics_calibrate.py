@@ -54,6 +54,12 @@ Output:
   cam_intrinsics.npz  (backs up any existing file to cam_intrinsics_prev.npz)
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import time
 
@@ -62,8 +68,8 @@ import numpy as np
 import pyrealsense2 as rs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_NPZ = os.path.join(HERE, "cam_intrinsics.npz")
-PREV_NPZ = os.path.join(HERE, "cam_intrinsics_prev.npz")
+OUT_NPZ = data_path("cam_intrinsics.npz")
+PREV_NPZ = data_path("cam_intrinsics_prev.npz")
 
 BOARD_COLS = int(os.environ.get("BOARD_COLS", "9"))   # internal corners, not squares
 BOARD_ROWS = int(os.environ.get("BOARD_ROWS", "6"))
@@ -219,7 +225,7 @@ def solve_and_save(img_points, objp, w, h):
         np.savez(PREV_NPZ, **{k: old[k] for k in old.files})
         print("  backed up existing cam_intrinsics.npz -> %s" % PREV_NPZ)
 
-    np.savez(OUT_NPZ, fx=fx, fy=fy, ppx=ppx, ppy=ppy,
+    np.savez(OUT_NPZ, distortion_model="brown_conrady", fx=fx, fy=fy, ppx=ppx, ppy=ppy,
              coeffs=dist.ravel()[:5], width=w, height=h,
              fit_rms_px=rms, loo_rms_px=loo_rms, n=n)
     print("  SAVED -> %s" % OUT_NPZ)

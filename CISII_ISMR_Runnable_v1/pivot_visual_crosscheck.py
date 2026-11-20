@@ -18,6 +18,12 @@ Usage:
 Draws a magenta circle at the predicted pivot point on the live RealSense
 color stream. Press 's' to save a snapshot, 'q' to quit.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import os
 import numpy as np
 import cv2
@@ -25,9 +31,9 @@ import pyrealsense2 as rs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-he = np.load(os.path.join(HERE, "handeye_T.npz"))
+he = np.load(data_path("handeye_T.npz"))
 R_cb, t_cb = he["R"], he["t"]
-piv = np.load(os.path.join(HERE, "tip_offset_pivot.npz"))
+piv = np.load(data_path("tip_offset_pivot.npz"))
 p_pivot = piv["p_pivot"]
 print("Loaded handeye_T.npz: t =", t_cb)
 print("Loaded tip_offset_pivot.npz: p_pivot =", p_pivot, " n=", int(piv["n"]),
@@ -72,7 +78,7 @@ try:
         if k in (ord('q'), 27):
             break
         elif k == ord('s'):
-            path = os.path.join(HERE, "pivot_crosscheck_snap_%d.png" % snap_i)
+            path = data_path("pivot_crosscheck_snap_%d.png" % snap_i)
             cv2.imwrite(path, img)
             print("saved", path)
             snap_i += 1

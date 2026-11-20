@@ -17,6 +17,12 @@ Outputs (next to the input file):
   pairs_val.csv      (point HANDEYE_VAL_CSV at this)
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import argparse
 import os
 import numpy as np
@@ -24,7 +30,7 @@ import numpy as np
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("pairs_csv", nargs="?", default="handeye_data/pairs.csv")
+    ap.add_argument("pairs_csv", nargs="?", default=data_path("handeye_data", "pairs.csv"))
     ap.add_argument("--frac", type=float, default=0.2, help="fraction of poses to hold out")
     ap.add_argument("--cluster-mm", type=float, default=5.0,
                      help="group poses within this FrameEE-position distance before splitting "

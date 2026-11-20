@@ -1,0 +1,147 @@
+[
+  {
+    "historical_file": "trial20_20261012_192240.json",
+    "folder_id": "1QGlc-cum2MxINpMVgjQkpFwk9XjTjY9u",
+    "sha256": "753e1e796e4b68c7af31a9265535cbe1f57929acfb4077baec71716fab7d863c",
+    "schema": {
+      "trial": "int",
+      "timestamp": "float",
+      "timestamp_iso": "str",
+      "stills": "list",
+      "tip_base_mm": "list",
+      "plunge_goal_base_mm": "list",
+      "internal_rcm_base_mm": "list",
+      "rcm_target_base_mm": "list",
+      "rcm_source": "str",
+      "mic_rcm_mode": "str",
+      "mic_target_mark": "int",
+      "mic_rcm_angle_deg": "float",
+      "phantom_normal_base": "list",
+      "insert_angle_deg": "float",
+      "plunge_depth_mm": "float",
+      "mic_lock_rec": "dict",
+      "mic_geo_freeze": "dict",
+      "last_correspondence": "dict",
+      "origin_correction_mm": "list",
+      "post_retract_stills": "list",
+      "post_retract_timestamp": "float"
+    }
+  },
+  {
+    "historical_file": "config_snapshot.json",
+    "folder_id": "1QGlc-cum2MxINpMVgjQkpFwk9XjTjY9u",
+    "sha256": "fc03621f5da8b39c14abe04427739bb160ebaa1836aee62bf5ce664892b45ceb",
+    "schema": {
+      "controller": "dict",
+      "md5": "dict",
+      "snapshot_time": "float"
+    }
+  },
+  {
+    "historical_file": "precision_rows.csv",
+    "folder_id": "1QGlc-cum2MxINpMVgjQkpFwk9XjTjY9u",
+    "sha256": "414ad91fd722f7cf2bdc59326fdfe27955968fe5808b20eb173b80596438e2ed",
+    "schema": {
+      "columns": [
+        "timestamp",
+        "action",
+        "result",
+        "err_deg",
+        "err_mm",
+        "elapsed_s",
+        "insert_angle_deg",
+        "azimuth_deg",
+        "vis3d_ok",
+        "vis3d_err_deg",
+        "vis3d_unc_deg",
+        "vis3d_n_points",
+        "vis3d_n_inliers",
+        "vis3d_inlier_ratio",
+        "vis3d_extent_mm",
+        "vis3d_rms_mm",
+        "vis3d_stability_deg",
+        "vis3d_fail_reason",
+        "vis3d_dx",
+        "vis3d_dy",
+        "vis3d_dz",
+        "ee_qx",
+        "ee_qy",
+        "ee_qz",
+        "ee_qw"
+      ]
+    }
+  },
+  {
+    "historical_file": "trial01_20261012_174728.json",
+    "folder_id": "1DD6GMZ_il4mFa0y4SFUb7fN17v2lA-gt",
+    "sha256": "401f4c341b17d56de54cc9328d3ec87e46075ad7d031a506381aaf7f9e98f82d",
+    "schema": {
+      "trial": "int",
+      "timestamp": "float",
+      "timestamp_iso": "str",
+      "stills": "list",
+      "tip_base_mm": "list",
+      "plunge_goal_base_mm": "list",
+      "internal_rcm_base_mm": "list",
+      "rcm_target_base_mm": "list",
+      "rcm_source": "str",
+      "mic_rcm_mode": "str",
+      "mic_target_mark": "int",
+      "mic_rcm_angle_deg": "float",
+      "phantom_normal_base": "list",
+      "insert_angle_deg": "float",
+      "plunge_depth_mm": "float",
+      "mic_lock_rec": "dict",
+      "mic_geo_freeze": "dict",
+      "last_correspondence": "dict",
+      "origin_correction_mm": "list",
+      "post_retract_stills": "list",
+      "post_retract_timestamp": "float",
+      "globe_motion_note": "str"
+    }
+  },
+  {
+    "historical_file": "config_snapshot.json",
+    "folder_id": "1DD6GMZ_il4mFa0y4SFUb7fN17v2lA-gt",
+    "sha256": "89653a77c932a6c13c5e0e857285c1b78ee72de354690150cf54ab8b80d09294",
+    "schema": {
+      "controller": "dict",
+      "md5": "dict",
+      "snapshot_time": "float"
+    }
+  },
+  {
+    "historical_file": "precision_rows.csv",
+    "folder_id": "1DD6GMZ_il4mFa0y4SFUb7fN17v2lA-gt",
+    "sha256": "07e7d11b70d26acdde08bb5e7840c356b48bf74c2c4575e379541520bb247e33",
+    "schema": {
+      "columns": [
+        "timestamp",
+        "action",
+        "result",
+        "err_deg",
+        "err_mm",
+        "elapsed_s",
+        "insert_angle_deg",
+        "azimuth_deg",
+        "vis3d_ok",
+        "vis3d_err_deg",
+        "vis3d_unc_deg",
+        "vis3d_n_points",
+        "vis3d_n_inliers",
+        "vis3d_inlier_ratio",
+        "vis3d_extent_mm",
+        "vis3d_rms_mm",
+        "vis3d_stability_deg",
+        "vis3d_fail_reason",
+        "vis3d_dx",
+        "vis3d_dy",
+        "vis3d_dz",
+        "ee_qx",
+        "ee_qy",
+        "ee_qz",
+        "ee_qw"
+      ]
+    }
+  }
+]

@@ -71,6 +71,12 @@ Usage:
 See /home/eyebrp/Matthew/microscope_autonomy/README.md for the full,
 step-by-step lab protocol tying all of this (plus the 'e' key) together.
 """
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import argparse
 import json
 import os
@@ -472,24 +478,21 @@ if __name__ == "__main__":
     ap.add_argument("--loo", action="store_true",
                      help="also run leave-one-out cross-validation (auto-runs anyway if "
                           "n>=5; this flag mainly forces the attempt / makes intent explicit)")
-    ap.add_argument("--touches", default="mic_calib_touches.jsonl")
+    ap.add_argument("--touches", default=data_path("mic_calib_touches.jsonl"))
     ap.add_argument("--clicks")
-    ap.add_argument("--out", default="mic_extrinsic_calib.npz")
+    ap.add_argument("--out", default=data_path("mic_extrinsic_calib.npz"))
     ap.add_argument("--still")
-    ap.add_argument("--calib", default="mic_extrinsic_calib.npz")
+    ap.add_argument("--calib", default=data_path("mic_extrinsic_calib.npz"))
     ap.add_argument("--mark", type=int, default=None, choices=[0, 1],
                      help="which entry-point candidate (0 or 1) to write out for the robot to consume")
-    ap.add_argument("--write-json", default=os.path.join(
-        "/home/eyebrp/SHER_I2RIS_teleoperate/third_part", "mic_entry_point.json"),
+    ap.add_argument("--write-json", default=data_path("mic_entry_point.json"),
         help="path home_to_rcm_insert_v2_precision.py's 'e' key reads from")
     ap.add_argument("--ring-offset", action="store_true",
                      help="learn a ring-center->entry-point base-frame offset from a live 'z' "
                           "lock (auto_target.npz) + this --still + --calib, for the 'x' key")
-    ap.add_argument("--ring-npz", default=os.path.join(
-        "/home/eyebrp/SHER_I2RIS_teleoperate/third_part", "auto_target.npz"),
+    ap.add_argument("--ring-npz", default=data_path("auto_target.npz"),
         help="the D405 'z'-key ring lock artifact to learn the offset from")
-    ap.add_argument("--ring-offset-out", default=os.path.join(
-        "/home/eyebrp/Matthew/microscope_autonomy", "ring_to_entry_offset.npz"))
+    ap.add_argument("--ring-offset-out", default=data_path("ring_to_entry_offset.npz"))
     ap.add_argument("--max-ring-age-s", type=float, default=30.0)
     a = ap.parse_args()
     if a.fit:

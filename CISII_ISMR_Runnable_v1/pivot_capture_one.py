@@ -15,6 +15,12 @@ rotation angle vs all prior samples in the file) so you know when you've
 covered enough of the target range.
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+from runtime_session import ROOT, data_path
 import csv
 import os
 import sys
@@ -24,7 +30,7 @@ import rospy
 from geometry_msgs.msg import Transform
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_CSV = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "pivot_samples_30deg.csv")
+OUT_CSV = sys.argv[1] if len(sys.argv) > 1 else data_path("pivot_samples_30deg.csv")
 
 BURST_N = int(os.environ.get("PIVOT_BURST_N", "30"))
 BURST_HZ = float(os.environ.get("PIVOT_BURST_HZ", "100.0"))
@@ -46,6 +52,8 @@ def quat_angle_deg(q1, q2):
 
 def main():
     rospy.init_node("pivot_capture_one", anonymous=True, disable_signals=True)
+    from tip_inee_guard import assert_tip_inee
+    assert_tip_inee(context="pivot_capture_one")
     rospy.Subscriber("/SHER21/eye_robot/FrameEE", Transform, _cb, queue_size=1)
     rospy.sleep(1.0)
     if _ee["p"] is None:

@@ -23,6 +23,12 @@ USAGE (after sourcing ROS + the gscam launch file is already up):
     python3 mic_live_capture_ros.py --topic /decklink/camera/image_raw --interval 0.3
 """
 from __future__ import print_function
+
+# Runnable v1: relocatable source and isolated session artifacts.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+from runtime_session import ROOT, data_path
 import argparse
 import glob
 import os
@@ -35,7 +41,7 @@ from sensor_msgs.msg import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_OUT_DIR = os.environ.get(
-    "MIC_LIVE_STILLS_DIR", os.path.join(HERE, "mic_live_stills")
+    "MIC_LIVE_STILLS_DIR", data_path("mic_live_stills")
 )
 DEFAULT_TOPIC = "/decklink/camera/image_raw"
 DEFAULT_KEEP = 5

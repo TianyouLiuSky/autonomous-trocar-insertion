@@ -1,8 +1,8 @@
 # Intel RealSense D405 Camera Settings Integration & AI Coding Handoff Guide
 
-**Project:** CIS II / SHER autonomous insertion pipeline  
-**Target camera:** Intel RealSense D405  
-**Primary objective:** reduce overexposure on the white eye phantom while preserving the existing perception and robot pipeline  
+**Project:** CIS II / SHER autonomous insertion pipeline
+**Target camera:** Intel RealSense D405
+**Primary objective:** reduce overexposure on the white eye phantom while preserving the existing perception and robot pipeline
 **Validated nominal camera setting:** `Auto Exposure OFF`, `Exposure = 12000`, `Gain = 16`
 
 ---

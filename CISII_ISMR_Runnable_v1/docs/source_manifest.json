@@ -1,0 +1,286 @@
+[
+  {
+    "file": "handeye_capture_one.py",
+    "source_url": "https://drive.google.com/file/d/1wA51a-BnLMAGx9fRWnN3HwCTZ3jhvMzf/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.730Z",
+    "sha256_original": "a3cb764a1e4629aa4c5e2a1b2ebaecf1005cd4d7f9d1bc6462b737928f4e25f2",
+    "group": 0
+  },
+  {
+    "file": "trial_archiver.py",
+    "source_url": "https://drive.google.com/file/d/1WWiuwsq45DWrH3sicIEcmCD-2yXcbMkP/view?usp=drivesdk",
+    "source_modified": "2026-10-12T22:25:03.325Z",
+    "sha256_original": "2b80b8e62aa6ec46d9cb365439d60c0968c6758d21f2afb9004338d6e1169dbb",
+    "group": 0
+  },
+  {
+    "file": "home_to_rcm_insert_v2_precision.py",
+    "source_url": "https://drive.google.com/file/d/1aVWXzB6VLVBu7VoSp-UWNqvNhjiBn2ZS/view?usp=drivesdk",
+    "source_modified": "2026-10-12T22:17:10.618Z",
+    "sha256_original": "cd87e5691caf2599a0cb0f0c076d5a0b626845470bea2233077041ba08c0c774",
+    "group": 0
+  },
+  {
+    "file": "origin_correction_from_discrim_csv.py",
+    "source_url": "https://drive.google.com/file/d/1qevPUA_tYTXsA1-czgn8FR4T8kOcFHXC/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:50:17.903Z",
+    "sha256_original": "39ceec72d1cbc59fc25def481e1bf158b12d217f13ac40aae071b0c7350f9f53",
+    "group": 0
+  },
+  {
+    "file": "jog_only.py",
+    "source_url": "https://drive.google.com/file/d/1Zi3fpmivv1XvXepJRJomB0y1UcfW1CS3/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.730Z",
+    "sha256_original": "74632f5243a8296403842f5a9e4881cf8538193e94104ef0099880d02126bb36",
+    "group": 0
+  },
+  {
+    "file": "pivot_residual_fit.py",
+    "source_url": "https://drive.google.com/file/d/1KQhRk6A-OR6HxrJMWgfaIB3GityVrhc-/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.734Z",
+    "sha256_original": "82ca0440cbb21f5a653b48678acf02f9cdba51f12a22e5eda041dcc45b0a54eb",
+    "group": 0
+  },
+  {
+    "file": "intr_util.py",
+    "source_url": "https://drive.google.com/file/d/1lRKdeC1t4xkmG29Dmr94fsMQ_aflNIBe/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.742Z",
+    "sha256_original": "58aae6ce0639b4cf8f05e9e436e5c89cc70a920d20dbfd0f7803cafe33695f35",
+    "group": 0
+  },
+  {
+    "file": "measure_trial_holes.py",
+    "source_url": "https://drive.google.com/file/d/1klxT38CcSEd8SvfTvce0Kg9T290_Ep9q/view?usp=drivesdk",
+    "source_modified": "2026-10-12T19:40:16.772Z",
+    "sha256_original": "b505c5655d19b85b9fc31560025184358b2a3c81fed9709f5b4dddc0991242a1",
+    "group": 0
+  },
+  {
+    "file": "pivot_calibration.py",
+    "source_url": "https://drive.google.com/file/d/108_1p1NdN-kqkIrJO0-q0kCHU13YQIlH/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.734Z",
+    "sha256_original": "720da2d8767835146b834282200da8eaacf8c3a5b26950326293c23d80764222",
+    "group": 0
+  },
+  {
+    "file": "MIC_INDEPENDENT_VERIFICATION_PROTOCOL.md",
+    "source_url": "https://docs.google.com/document/d/1yz6Y6G0V1iVpwgh6C8XFekL_Fermx5yu/edit?usp=drivesdk&ouid=111607941170491199351&rtpof=true&sd=true",
+    "source_modified": "2026-10-11T17:29:11.425Z",
+    "sha256_original": "96955afce575b06bf68c7c5047d17af9c099019cb9c5806a9015024b5ea0f1f3",
+    "group": 0
+  },
+  {
+    "file": "fast_pivot_fit_woodbury.py",
+    "source_url": "https://drive.google.com/file/d/1BkTIE83-8jsReZp8ljVs1Ro4kOp5_F2j/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:41.718Z",
+    "sha256_original": "7f3b2233880f20d93008bc72b426c438d7d36067ad7d92a4ef6a5dcd29b46417",
+    "group": 0
+  },
+  {
+    "file": "tip_inee_guard.py",
+    "source_url": "https://drive.google.com/file/d/1Kbk12t6EU9dzUNVXPSssQVNKz-tUxOr7/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.738Z",
+    "sha256_original": "c21088c3a98d8b27e4a3eb3b8565393f83116f781d1950639e40fd2e37ee498c",
+    "group": 0
+  },
+  {
+    "file": "README.md",
+    "source_url": "https://docs.google.com/document/d/1Z3he9SE_nFY63Usnq7ePpqBUBWeFDZEX/edit?usp=drivesdk&ouid=111607941170491199351&rtpof=true&sd=true",
+    "source_modified": "2026-10-11T17:29:11.713Z",
+    "sha256_original": "5bf3296c0055dcf1a09fb9f6af8f3e3e9c5c36f8bb65b83d2c4e31fdf7bdeeab",
+    "group": 0
+  },
+  {
+    "file": "run_main.sh",
+    "source_url": "https://drive.google.com/file/d/1zqWILmCz1516bBEWijoR0Zl6--bc13RS/view?usp=drivesdk",
+    "source_modified": "2026-10-12T21:42:48.694Z",
+    "sha256_original": "c22492bac38644897525f12619df7892d007fa850f4d94dbce3bc85a8fcf2005",
+    "group": 0
+  },
+  {
+    "file": "tip_pin_check_v3_fullpose.py",
+    "source_url": "https://drive.google.com/file/d/1PcDfGQQkddLQE-tWwV2Fe61hQYfFCuTh/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.738Z",
+    "sha256_original": "385d8f4fb38994257ee068025534cdf84da223736f965f03ce6a71614bada28f",
+    "group": 0
+  },
+  {
+    "file": "handeye_vs_tip_discriminate.py",
+    "source_url": "https://drive.google.com/file/d/1TEcAKRfid63TaD_4J6AG2EhaUzilNKgs/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.734Z",
+    "sha256_original": "6b0c6d4f2cdb9fa347f26ef5ea5b3152b036bb95353782c1c2c75513b7e914b0",
+    "group": 0
+  },
+  {
+    "file": "DECKLINK_SETUP.md",
+    "source_url": "https://docs.google.com/document/d/1TM55vTCrSjhKIDwsbrSk_VyNf_lREzXz/edit?usp=drivesdk&ouid=111607941170491199351&rtpof=true&sd=true",
+    "source_modified": "2026-09-22T19:05:27.988Z",
+    "sha256_original": "cd211db878e3365e4fa1eaa238e5a5d5fbf4fa6a6afd0cb504c9fbd5255a4c87",
+    "group": 0
+  },
+  {
+    "file": "save_manual_still.py",
+    "source_url": "https://drive.google.com/file/d/1Jz67WCjIF3cK2elMjlI6r9n7ZWBnBF-o/view?usp=drivesdk",
+    "source_modified": "2026-10-12T19:40:02.843Z",
+    "sha256_original": "a20123d903a1ffe11e0d0d7270965ca585a814f3e797dc499544c73dc2a98d6b",
+    "group": 0
+  },
+  {
+    "file": "rcmoffset_fit.py",
+    "source_url": "https://drive.google.com/file/d/1WHkAqGZBKrdEymGI2k5whidabIyP5uJy/view?usp=drivesdk",
+    "source_modified": "2026-09-21T21:49:04.738Z",
+    "sha256_original": "500b4066da5b2d2e691d4f1c93f7741caad53daee6f0eb8a1b0fe1f15549c848",
+    "group": 0
+  },
+  {
+    "file": "handeye_calibrate.py",
+    "source_url": "https://drive.google.com/file/d/1d3-5MUqCCmx6VpKZZw7HB-4CN6Ll5JBU/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:11.909Z",
+    "sha256_original": "112b949c5720dd27307267ec54f52deb8577e78cfaf7985154c8366ae847d7c6",
+    "group": 0
+  },
+  {
+    "file": "microscope_autonomy/mic_extrinsic_calib.py",
+    "source_url": "https://drive.google.com/file/d/1MG7eMbEXztWH73WxRrpX2sBKJUnCdTYn/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:11.273Z",
+    "sha256_original": "4100dfb7bc8f42113d6a135ff6f35a3dbc3608723055ac083536da49605b9d10",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/click_calib_points_per_touch.py",
+    "source_url": "https://drive.google.com/file/d/1GgH8QB0KAKAXTmCNo3m_6XmxPlqggKQm/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:12.213Z",
+    "sha256_original": "93f71933b072fc891b0852879c225306c1a063ce0952d95dbed383394d3ecd8a",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/correspondence_report.py",
+    "source_url": "https://drive.google.com/file/d/1-Ng3pPwnKZhy9tJqOCvG6VSAOOUUJvHd/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:12.405Z",
+    "sha256_original": "da14927c5015cb51ef9c2a6e85e76066b83c35363c73c164cf2bf7c62c4a8ef6",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/mic_independent_verify.py",
+    "source_url": "https://drive.google.com/file/d/1ZDs_7abobDm7dWLRaAtIT6PqDU2_YXPC/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:11.353Z",
+    "sha256_original": "3d244f889457a9f1ef60754c7ee1bcdc89ae197f1a44106b5d14deb019cc7c17",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/mic_live_capture.py",
+    "source_url": "https://drive.google.com/file/d/1QPgeUZ2dbn7-npUiRdR8h0mMhRgPGDOk/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:11.065Z",
+    "sha256_original": "3b59b9dfaa87a939439197fe8448603a2437adbe38e8363cf82bc58b3af4ea67",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/mic_perception.py",
+    "source_url": "https://drive.google.com/file/d/17UN1iHOWZ5kNdoOQoSeZiPWF_XoTIJIx/view?usp=drivesdk",
+    "source_modified": "2026-10-12T19:45:52.535Z",
+    "sha256_original": "f08502e7017455959f4b026fe220b8f3eeb74328fe3a4aa8c4129e407265cf65",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/mic_ring_offset_verify.py",
+    "source_url": "https://drive.google.com/file/d/1g0Zre7slZNLEoxre1w_56HNFpLSTb7bH/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:11.641Z",
+    "sha256_original": "328e14adeaff46a8ded17158fd23a281f41b05d5f29e8ffea76732d50ca5c37c",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/mic_live_capture_ros.py",
+    "source_url": "https://drive.google.com/file/d/1ylIO51iEfLLYKgfYVY0V4nMjjW4H9Wfb/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:10.969Z",
+    "sha256_original": "6ff4ee96586d8e6371a8fce53e5aec8f3cb1510a764efae3162efaa15381a668",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/click_calib_points.py",
+    "source_url": "https://drive.google.com/file/d/1P-iAPDaFcClZPdZ8J5lq-vMHqDgipvKs/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:11.221Z",
+    "sha256_original": "375e169939bd9a79d117e2f683da64cf8613217c2071f97e23d306d3128bb91f",
+    "group": 1
+  },
+  {
+    "file": "microscope_autonomy/phantom_normal_repeatability.py",
+    "source_url": "https://drive.google.com/file/d/12zr7k4k6kO4Nq4nMrLjAspJZjuZ-zNmQ/view?usp=drivesdk",
+    "source_modified": "2026-10-11T17:29:12.333Z",
+    "sha256_original": "dd55327d37a5c5587a3888eb17d601801d522131154fb34ca23e532ff2b16fc7",
+    "group": 1
+  },
+  {
+    "file": "camera_intrinsics_calibrate_charuco.py",
+    "source_url": "https://drive.google.com/file/d/1KXKidACDzwMCuoEAn-HgarHlrpposvQg/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:40:52.754Z",
+    "sha256_original": "0dcca3c58b14e1b14ecff38fe10c58571ed61e8669a7107c34848ccc42746508",
+    "group": 2
+  },
+  {
+    "file": "camera_intrinsics_calibrate.py",
+    "source_url": "https://drive.google.com/file/d/1Zj7oOwisLQLEZviETSn4FqJ0ycQFkCkq/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:40:52.754Z",
+    "sha256_original": "ab20c9d6dbe7fb458e12c5e02b495243abc3c6f5efd5fa627d60833a0efde488",
+    "group": 2
+  },
+  {
+    "file": "split_pairs_holdout.py",
+    "source_url": "https://drive.google.com/file/d/1YHWAT5Docm8ztPp6TmmrP2ezQNdbw4_A/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:40:52.754Z",
+    "sha256_original": "bfd5ef8ca8dac1eb56fe27d24f0258fd6da0fb3fcdfcabc3931de4df5e092c07",
+    "group": 2
+  },
+  {
+    "file": "handeye_compare_on_val.py",
+    "source_url": "https://drive.google.com/file/d/1dWCklRGhma378-SOKidVIF48Ombtdr8a/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:40:52.754Z",
+    "sha256_original": "621f52dd0ac83f7c0cedb336957fc21b4379eb77119688007c3f951e2ffff6c2",
+    "group": 2
+  },
+  {
+    "file": "handeye_live_recheck.py",
+    "source_url": "https://drive.google.com/file/d/1PHuY58gwGmL4Ca1rg0r1t2BLQuVCx6ld/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:40:52.754Z",
+    "sha256_original": "c5cf067efa9d81967bfed850c6784b77ac66971f19c052b947b273a17b1c4eb6",
+    "group": 2
+  },
+  {
+    "file": "handeye_reproj_refine.py",
+    "source_url": "https://drive.google.com/file/d/14vi7-qhdMo0UQNCEXSLi4SyoFL6XwiSG/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:40:52.754Z",
+    "sha256_original": "96428e08e49e1d1caf784173d5834f3c7589719161a1ce3ab22b75be16f111d2",
+    "group": 2
+  },
+  {
+    "file": "pivot_visual_crosscheck.py",
+    "source_url": "https://drive.google.com/file/d/1ytG-sVd9tjOLWwc6ZKTkexIabPZswDOL/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:41:37.551Z",
+    "sha256_original": "9fc70aec28a8efd9d7df7fe165a2631e573665b1fd95df886d8231bc3e83648b",
+    "group": 3
+  },
+  {
+    "file": "pivot_capture_one.py",
+    "source_url": "https://drive.google.com/file/d/1Uga0YyOFaBjqA4Jk51HOJzMTIpWmGcNL/view?usp=drivesdk",
+    "source_modified": "2026-08-25T23:41:37.551Z",
+    "sha256_original": "b627d8ba85ab1942d0498084d886615b1485d80bf0b7b8e413c9c05eef6aa28a",
+    "group": 3
+  },
+  {
+    "file": "needle_axis_diagnose.py",
+    "source_url": "CISII_CODEX_TRANSFER_BUNDLE.zip/source_snapshot/needle_axis_diagnose.py",
+    "sha256_original": "9cc362667d9c4f7cc6d5710591449bdbf154d360991d5140abd523d572b7de6f",
+    "group": "attachment"
+  },
+  {
+    "file": "tip_offset_apply_visual_correction.py",
+    "source_url": "CISII_CODEX_TRANSFER_BUNDLE.zip/source_snapshot/tip_offset_apply_visual_correction.py",
+    "sha256_original": "cbaaba060275c76dc56649eef2e69d05b4d4635bc5776a1dc2b58fdd43e9e9c6",
+    "group": "attachment"
+  },
+  {
+    "file": "rcm_definition.py",
+    "source_url": "CISII_CODEX_TRANSFER_BUNDLE.zip/source_snapshot/rcm_definition.py",
+    "sha256_original": "b25176466a8cc52be2be92202079fdffc5a4cbf97efbd88a8137f64d3c7e3430",
+    "group": "attachment"
+  }
+]
